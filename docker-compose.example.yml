@@ -1,0 +1,7 @@
+﻿services:
+  deduction-deck:
+    image: ghcr.io/YOUR_GITHUB_OWNER/deduction-deck:latest
+    container_name: deduction-deck
+    restart: unless-stopped
+    ports:
+      - "8080:80"
