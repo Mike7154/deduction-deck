@@ -25,6 +25,7 @@ export type GameState = {
   marks: Record<string, Record<LocationId, Mark>>
   suggestions: Suggestion[]
   behaviorOptIn: boolean
+  activeSuggesterId: string
 }
 
 export type BehaviorCardStat = {
@@ -84,6 +85,7 @@ export function createDefaultGame(): GameState {
     marks: createBlankMarks(),
     suggestions: [],
     behaviorOptIn: true,
+    activeSuggesterId: defaultPlayers[0].id,
   }
 }
 

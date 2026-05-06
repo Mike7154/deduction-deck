@@ -7,6 +7,7 @@ export type SolverResult = {
   probabilities: Record<string, Record<LocationId, number>>
   deductions: Array<{ cardId: string; locationId: LocationId; mark: 'yes' | 'no'; reason: string }>
   envelopePick: Record<CardType, { cardId: string; probability: number } | null>
+  accusationProbability: number
   messages: string[]
 }
 
@@ -105,6 +106,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
   let worlds = 0
   let capped = false
+  const envelopeCombos: Record<string, number> = {}
 
   const possibleClause = (clause: Clause) => clause.cardIds.some((cardId) => assignment[cardId] === clause.playerId || (!assignment[cardId] && allowedFor(game.cards.find((c) => c.id === cardId)!).includes(clause.playerId)))
   const satisfiedClause = (clause: Clause) => clause.cardIds.some((cardId) => assignment[cardId] === clause.playerId)
@@ -133,6 +135,9 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   function recordWorld() {
     worlds++
     for (const card of game.cards) probabilities[card.id][assignment[card.id]] += 1
+    const byType = Object.fromEntries(game.cards.filter((card) => assignment[card.id] === 'envelope').map((card) => [card.type, card.id])) as Record<CardType, string>
+    const key = `${byType.suspect}|${byType.weapon}|${byType.room}`
+    envelopeCombos[key] = (envelopeCombos[key] ?? 0) + 1
   }
 
   function recurse(index: number) {
@@ -190,8 +195,10 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     const cards = game.cards.filter((c) => c.type === type).map((c) => ({ cardId: c.id, probability: probabilities[c.id].envelope })).sort((a, b) => b.probability - a.probability)
     return [type, cards[0] ?? null]
   })) as SolverResult['envelopePick']
+  const comboKey = envelopePick.suspect && envelopePick.weapon && envelopePick.room ? `${envelopePick.suspect.cardId}|${envelopePick.weapon.cardId}|${envelopePick.room.cardId}` : ''
+  const accusationProbability = comboKey ? (envelopeCombos[comboKey] ?? 0) / worlds : 0
 
-  return { status: capped ? 'capped' : 'exact', worlds, cappedAt: maxWorlds, probabilities, deductions, envelopePick, messages }
+  return { status: capped ? 'capped' : 'exact', worlds, cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
 }
 
 function contradiction(game: GameState, maxWorlds: number, message: string): SolverResult {
@@ -202,6 +209,7 @@ function contradiction(game: GameState, maxWorlds: number, message: string): Sol
     probabilities: emptyProbabilities(game.cards, ['envelope', ...game.players.map((p) => p.id)]),
     deductions: [],
     envelopePick: { suspect: null, weapon: null, room: null },
+    accusationProbability: 0,
     messages: [message],
   }
 }
