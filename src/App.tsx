@@ -166,7 +166,7 @@ function loadTheme(): ThemeMode {
 }
 
 function guessCount(game: GameState, playerId: string, cardId: string) {
-  return game.suggestions.filter((s) => s.suggesterId === playerId && s.cardIds.includes(cardId)).length
+  return game.suggestions.filter((s) => !s.disabled && s.suggesterId === playerId && s.cardIds.includes(cardId)).length
 }
 
 function resetKnownEvidence(game: GameState): GameState {
@@ -178,6 +178,25 @@ function resetKnownEvidence(game: GameState): GameState {
     suggestions: [],
     activeSuggesterId: players[0]?.id ?? game.activeSuggesterId,
   }
+}
+
+function withSuggestionDisabledForTest(game: GameState, suggestionId: string): GameState {
+  const next = structuredClone(game)
+  const suggestion = next.suggestions.find((s) => s.id === suggestionId)
+  if (!suggestion) return next
+  suggestion.disabled = true
+  if (suggestion.result.kind === 'shown') {
+    const { shownCardId, disproverId } = suggestion.result
+    const stillShownByActiveEvidence = next.suggestions.some((s) =>
+      s.id !== suggestionId &&
+      !s.disabled &&
+      s.result.kind === 'shown' &&
+      s.result.shownCardId === shownCardId &&
+      s.result.disproverId === disproverId
+    )
+    if (!stillShownByActiveEvidence && next.marks[shownCardId]?.[disproverId] === 'yes') next.marks[shownCardId][disproverId] = 'unknown'
+  }
+  return next
 }
 
 function App() {
@@ -195,6 +214,14 @@ function App() {
   const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
+  const likelyBadSuggestionIds = useMemo(() => {
+    if (setupMode || solver?.status !== 'contradiction') return new Set<string>()
+    const helpfulIds = game.suggestions
+      .filter((suggestion) => !suggestion.disabled)
+      .filter((suggestion) => solveGame(withSuggestionDisabledForTest(game, suggestion.id)).status !== 'contradiction')
+      .map((suggestion) => suggestion.id)
+    return new Set(helpfulIds)
+  }, [game, setupMode, solver?.status])
 
   function activateUser(email: string) {
     const normalized = normalizeEmail(email)
@@ -275,10 +302,34 @@ function App() {
     updateGame(next)
   }
 
+  function setSuggestionDisabled(id: string, disabled: boolean) {
+    const next = structuredClone(game)
+    const suggestion = next.suggestions.find((s) => s.id === id)
+    if (!suggestion) return
+    suggestion.disabled = disabled
+    if (suggestion.result.kind === 'shown') {
+      const { shownCardId, disproverId } = suggestion.result
+      if (disabled) {
+        const stillShownByActiveEvidence = next.suggestions.some((s) =>
+          s.id !== id &&
+          !s.disabled &&
+          s.result.kind === 'shown' &&
+          s.result.shownCardId === shownCardId &&
+          s.result.disproverId === disproverId
+        )
+        if (!stillShownByActiveEvidence && next.marks[shownCardId]?.[disproverId] === 'yes') next.marks[shownCardId][disproverId] = 'unknown'
+      } else {
+        next.marks[shownCardId][disproverId] = 'yes'
+      }
+    }
+    updateGame(next)
+  }
+
   function finishGame(envelope: Record<CardType, string>, playerHands: Record<string, string[]>, phase: string) {
     if (!userEmail) return
     const nextStats = structuredClone(stats)
     for (const suggestion of game.suggestions) {
+      if (suggestion.disabled) continue
       const holderCards = playerHands[suggestion.suggesterId] ?? []
       for (const cardId of suggestion.cardIds) {
         const key = `${suggestion.suggesterId}:${cardId}`
@@ -339,7 +390,7 @@ function App() {
           {matrixMode === 'probabilities'
             ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={(cell) => { setSelected(cell); setQuickMark(cell) }} onSetMark={setMark} onOpenCard={setDetailCardId} />
             : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} />}
-          <EvidenceLog game={game} solver={solver} />
+          <EvidenceLog game={game} solver={solver} likelyBadSuggestionIds={likelyBadSuggestionIds} onToggleDisabled={setSuggestionDisabled} />
         </section>
 
         <aside className="inspector panel">
@@ -661,7 +712,7 @@ function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, on
 
 
 function CardDetailModal({ card, game, solver, onClose }: { card: Card; game: GameState; solver: SolverResult; onClose: () => void }) {
-  const involved = game.suggestions.filter((s) => s.cardIds.includes(card.id))
+  const involved = game.suggestions.filter((s) => !s.disabled && s.cardIds.includes(card.id))
   const repeatedByPlayer = orderedPlayers(game.players)
     .map((player) => ({ player, count: involved.filter((s) => s.suggesterId === player.id).length }))
     .filter(({ count }) => count > 0)
@@ -768,16 +819,27 @@ function SelectionInspector({ selectedCard, selectedLocation, selected, solver, 
   </section>
 }
 
-function EvidenceLog({ game, solver }: { game: GameState; solver: SolverResult }) {
+function EvidenceLog({ game, solver, likelyBadSuggestionIds, onToggleDisabled }: { game: GameState; solver: SolverResult; likelyBadSuggestionIds: Set<string>; onToggleDisabled: (id: string, disabled: boolean) => void }) {
+  const showAll = solver.status === 'contradiction'
+  const suggestions = showAll ? game.suggestions : game.suggestions.slice(0, 8)
   return <section className="matrix-subsection evidence-log">
     <h2>Evidence log</h2>
+    {solver.status === 'contradiction' && <p className="hint danger-hint">
+      Contradiction found. Highlighted entries are likely suspects because disabling that single entry makes the board valid again.
+    </p>}
     <div className="log-list">
-      {game.suggestions.length ? game.suggestions.slice(0, 8).map((s) => {
+      {suggestions.length ? suggestions.map((s) => {
         const guessedCards = s.cardIds.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
-        return <article className="log-item action-row" key={s.id}>
+        const likelyBad = likelyBadSuggestionIds.has(s.id)
+        return <article className={`log-item action-row ${s.disabled ? 'disabled-evidence' : ''} ${likelyBad ? 'likely-bad-evidence' : ''}`} key={s.id}>
           <div className="action-main">
             <strong>{playerById(game.players, s.suggesterId)?.name ?? 'Unknown player'}</strong>
             <span>guessed {guessedCards.map((card) => card.name).join(' / ')}</span>
+          </div>
+          <div className="evidence-actions">
+            {likelyBad && <span className="suspect-pill">Likely bad entry</span>}
+            {s.disabled && <span className="disabled-pill">Disabled</span>}
+            <button className="tiny" onClick={() => onToggleDisabled(s.id, !s.disabled)}>{s.disabled ? 'Re-enable' : 'Disable'}</button>
           </div>
           <p>{resultText(game, s)}</p>
           <DisproverProbabilities game={game} solver={solver} suggestion={s} cards={guessedCards} />

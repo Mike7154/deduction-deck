@@ -40,6 +40,7 @@ function suggestionFacts(players: Player[], suggestions: Suggestion[]) {
   const yesFacts: Array<{ playerId: string; cardId: string }> = []
 
   for (const s of suggestions) {
+    if (s.disabled) continue
     if (s.result.kind === 'unresolved') continue
     if (s.result.kind === 'nobody') {
       for (const p of playersBetween(players, s.suggesterId)) noFacts.push({ playerId: p.id, cardIds: [...s.cardIds] })

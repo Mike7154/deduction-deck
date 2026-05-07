@@ -124,6 +124,23 @@ td { padding: 7px 5px; border-bottom: 1px solid rgba(246, 219, 176, .08); color:
 .log-list { display: grid; gap: 9px; max-height: 300px; overflow: auto; }
 .log-item { padding: 10px; border-radius: 14px; background: rgba(0,0,0,.18); color: #e7d4b6; font-size: 13px; }
 .log-item small { display: block; color: #a99475; margin-top: 5px; }
+.danger-hint { background: rgba(222, 91, 78, .14); border: 1px solid rgba(222, 91, 78, .28); color: #ffcbc5; }
+.evidence-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.suspect-pill, .disabled-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.suspect-pill { background: rgba(222, 91, 78, .22); color: #ffb6ad; }
+.disabled-pill { background: rgba(255,255,255,.1); color: #a99475; }
+.likely-bad-evidence { border-color: rgba(222, 91, 78, .6); box-shadow: 0 0 0 1px rgba(222, 91, 78, .18), 0 18px 38px rgba(222, 91, 78, .08); }
+.disabled-evidence { opacity: .58; filter: saturate(.65); }
+.disabled-evidence .card-prob-strip { display: none; }
 .top-hints { display: grid; gap: 7px; margin: 12px 0; }
 .top-hints span { padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.06); color: #eed6ae; font-size: 13px; }
 .finish-box { margin-top: 12px; display: grid; gap: 10px; }

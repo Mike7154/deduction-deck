@@ -17,6 +17,7 @@ export type Suggestion = {
   cardIds: [string, string, string]
   result: SuggestionResult
   createdAt: number
+  disabled?: boolean
 }
 
 export type GameState = {
