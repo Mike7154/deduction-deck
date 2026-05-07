@@ -194,6 +194,7 @@ function App() {
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
   const [setupMode, setSetupMode] = useState(false)
   const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
+  const [collapsedTypes, setCollapsedTypes] = useState<Record<CardType, boolean>>({ suspect: false, weapon: false, room: false })
   const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
 
@@ -306,8 +307,8 @@ function App() {
             </div>
           </div>
           {matrixMode === 'probabilities'
-            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} onSelect={setSelected} onSetMark={setMark} onOpenCard={setDetailCardId} />
-            : <GuessMatrix game={game} locations={locations.filter((loc) => loc !== 'envelope')} onOpenCard={setDetailCardId} />}
+            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={setSelected} onSetMark={setMark} onOpenCard={setDetailCardId} />
+            : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} />}
         </section>
 
         <aside className="inspector panel">
@@ -539,16 +540,25 @@ function CardSelect({ label, type, game, value, onChange }: { label: string; typ
   return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, c.name])} />
 }
 
-function ProbabilityMatrix({ game, solver, locations, selected, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
+function envelopeLabel(game: GameState, solver: SolverResult, type: CardType) {
+  const solved = game.cards.find((card) => card.type === type && (game.marks[card.id].envelope === 'yes' || solver.probabilities[card.id]?.envelope === 1))
+  return solved ? ` - Envelope: ${solved.name}` : ''
+}
+
+function TypeHeader({ type, game, solver, collapsed, onToggle, colSpan }: { type: CardType; game: GameState; solver: SolverResult; collapsed: boolean; onToggle: () => void; colSpan: number }) {
+  return <tr className="group-row"><td colSpan={colSpan}><button className="group-toggle" onClick={onToggle}>{collapsed ? 'Show' : 'Hide'} {typeLabel[type]}{envelopeLabel(game, solver, type)}</button></td></tr>
+}
+
+function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
   return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{loc === 'envelope' ? 'Envelope' : playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
-    {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
+    {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
   </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc}>3 cards</td> : <td key={loc}>{countsFor(game, loc).known} known<br />{countsFor(game, loc).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
 }
 
-function GroupedRows({ type, game, solver, locations, selected, onSelect, onSetMark, onOpenCard }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
+function GroupedRows({ type, game, solver, locations, selected, collapsed, onToggle, onSelect, onSetMark, onOpenCard }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsed: boolean; onToggle: () => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
   return <>
-    <tr className="group-row"><td colSpan={locations.length + 1}>{typeLabel[type]}</td></tr>
-    {game.cards.filter((c) => c.type === type).map((card) => {
+    <TypeHeader type={type} game={game} solver={solver} collapsed={collapsed} onToggle={onToggle} colSpan={locations.length + 1} />
+    {!collapsed && game.cards.filter((c) => c.type === type).map((card) => {
       const envelopeOut = game.marks[card.id].envelope === 'no' || (solver.probabilities[card.id]?.envelope ?? 0) === 0
       return <tr className={envelopeOut ? 'not-envelope-row' : ''} key={card.id}>
         <td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>
@@ -565,14 +575,15 @@ function GroupedRows({ type, game, solver, locations, selected, onSelect, onSetM
   </>
 }
 
-function GuessMatrix({ game, locations, onOpenCard }: { game: GameState; locations: LocationId[]; onOpenCard: (cardId: string) => void }) {
+function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onOpenCard: (cardId: string) => void }) {
   return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <>
-      <tr className="group-row" key={`${type}-group`}><td colSpan={locations.length + 1}>{typeLabel[type]}</td></tr>
-      {game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
+      <TypeHeader key={`${type}-group`} type={type} game={game} solver={solver} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} colSpan={locations.length + 1} />
+      {!collapsedTypes[type] && game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
         const count = guessCount(game, loc, card.id)
         const mark = game.marks[card.id][loc]
-        return <td className={`guess-cell ${count > 0 ? 'has-guesses' : ''}`} key={loc}><strong>{count}</strong><small>{mark === 'yes' ? 'known held' : mark === 'no' ? 'ruled out' : 'unknown'}</small></td>
+        const probability = solver.probabilities[card.id]?.[loc] ?? 0
+        return <td className={`guess-cell ${count > 0 ? 'has-guesses' : ''}`} key={loc}><strong>{count}</strong><small>{mark === 'yes' ? 'known held' : mark === 'no' ? 'ruled out' : pct(probability)}</small></td>
       })}</tr>)}
     </>)}
   </tbody></table></div>
