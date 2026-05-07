@@ -7,10 +7,12 @@ const saveKey = 'deduction-deck-game-v1'
 const statsKey = 'deduction-deck-behavior-stats-v1'
 const usersKey = 'deduction-deck-users-v1'
 const sessionKey = 'deduction-deck-current-user-v1'
+const themeKey = 'deduction-deck-theme-v1'
 const phaseOptions = ['opening', 'middle', 'endgame'] as const
 
 type MatrixMode = 'probabilities' | 'guesses'
 type AuthMode = 'login' | 'signup'
+type ThemeMode = 'dark' | 'light'
 type UserAccount = { email: string; createdAt: number }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -159,6 +161,10 @@ function countsFor(game: GameState, playerId: string, solver?: SolverResult) {
   return { known, unknownInHand: Math.max(0, target - known), possible: game.cards.length - known - impossible }
 }
 
+function loadTheme(): ThemeMode {
+  return localStorage.getItem(themeKey) === 'light' ? 'light' : 'dark'
+}
+
 function guessCount(game: GameState, playerId: string, cardId: string) {
   return game.suggestions.filter((s) => s.suggesterId === playerId && s.cardIds.includes(cardId)).length
 }
@@ -186,6 +192,7 @@ function App() {
   const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
   const [collapsedTypes, setCollapsedTypes] = useState<Record<CardType, boolean>>({ suspect: false, weapon: false, room: false })
   const [undoStack, setUndoStack] = useState<GameState[]>([])
+  const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
 
@@ -291,6 +298,14 @@ function App() {
     updateGame(nextGame)
   }
 
+  function toggleTheme() {
+    setTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark'
+      localStorage.setItem(themeKey, next)
+      return next
+    })
+  }
+
   const selectedCard = selected ? cardById(game.cards, selected.cardId) : null
   const selectedLocation = selected?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, selected?.locationId ?? '')?.name
   const detailCard = detailCardId ? cardById(game.cards, detailCardId) : null
@@ -302,8 +317,8 @@ function App() {
   if (!solver) return null
 
   return (
-    <div className="app-shell">
-      <TopBar game={game} userEmail={userEmail} canUndo={undoStack.length > 0} onUndo={undoLastChange} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
+    <div className="app-shell" data-theme={theme}>
+      <TopBar game={game} userEmail={userEmail} theme={theme} onToggleTheme={toggleTheme} canUndo={undoStack.length > 0} onUndo={undoLastChange} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
       <main className="workspace">
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
@@ -381,7 +396,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => v
   </div>
 }
 
-function TopBar({ game, userEmail, canUndo, onUndo, onLogout, onNew, onSave }: { game: GameState; userEmail: string; canUndo: boolean; onUndo: () => void; onLogout: () => void; onNew: () => void; onSave: () => void }) {
+function TopBar({ game, userEmail, theme, onToggleTheme, canUndo, onUndo, onLogout, onNew, onSave }: { game: GameState; userEmail: string; theme: ThemeMode; onToggleTheme: () => void; canUndo: boolean; onUndo: () => void; onLogout: () => void; onNew: () => void; onSave: () => void }) {
   function exportJson() {
     const blob = new Blob([JSON.stringify(game, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -391,7 +406,7 @@ function TopBar({ game, userEmail, canUndo, onUndo, onLogout, onNew, onSave }: {
   }
   return <header className="topbar">
     <div className="brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>{userEmail}</small></div></div>
-    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onLogout}>Log out</button></nav>
+    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onToggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onLogout}>Log out</button></nav>
   </header>
 }
 

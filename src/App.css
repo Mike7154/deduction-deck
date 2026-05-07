@@ -453,3 +453,55 @@ th:first-child { width: 124px; }
 
 .undo-button:not(:disabled) { color: #1b100a; background: linear-gradient(135deg, #ffcf7a, #ff9f8f); font-weight: 950; border: 0; }
 .status.contradiction + .message::after { content: ' Use Undo to revert the last change.'; color: #ffcf7a; font-weight: 800; }
+
+/* Light theme overrides */
+.app-shell[data-theme="light"] {
+  color: #2f251a;
+  background:
+    radial-gradient(circle at 18% 4%, rgba(232, 190, 120, .35), transparent 34rem),
+    radial-gradient(circle at 94% 14%, rgba(125, 190, 152, .3), transparent 32rem),
+    linear-gradient(135deg, #fff8eb 0%, #f5ead8 48%, #eaf5ee 100%);
+}
+.app-shell[data-theme="light"] .topbar { border-bottom-color: rgba(93, 65, 35, .16); background: rgba(255, 250, 241, .72); }
+.app-shell[data-theme="light"] .panel { background: linear-gradient(180deg, rgba(255,255,255,.86), rgba(248, 238, 222,.8)); border-color: rgba(93, 65, 35, .16); box-shadow: 0 24px 60px rgba(89, 62, 35, .16); }
+.app-shell[data-theme="light"] .brand small,
+.app-shell[data-theme="light"] p,
+.app-shell[data-theme="light"] .muted,
+.app-shell[data-theme="light"] .field span,
+.app-shell[data-theme="light"] .current-turn-box span,
+.app-shell[data-theme="light"] .deduction-prob span,
+.app-shell[data-theme="light"] .microcopy { color: #745f47; }
+.app-shell[data-theme="light"] h2,
+.app-shell[data-theme="light"] .chevron,
+.app-shell[data-theme="light"] .summary-list strong,
+.app-shell[data-theme="light"] .top-hints span { color: #94611e; }
+.app-shell[data-theme="light"] button { background: rgba(93, 65, 35, .07); color: #3a2b1d; border-color: rgba(93, 65, 35, .16); }
+.app-shell[data-theme="light"] button:hover:not(:disabled) { background: rgba(93, 65, 35, .12); border-color: rgba(148, 97, 30, .36); }
+.app-shell[data-theme="light"] .primary,
+.app-shell[data-theme="light"] .undo-button:not(:disabled) { color: #21170d; background: linear-gradient(135deg, #f1bf69, #9ed2b7); }
+.app-shell[data-theme="light"] .setup-card,
+.app-shell[data-theme="light"] .suggestion-card,
+.app-shell[data-theme="light"] .deduction-card,
+.app-shell[data-theme="light"] .behavior-card,
+.app-shell[data-theme="light"] .inspector section,
+.app-shell[data-theme="light"] .sidebar section,
+.app-shell[data-theme="light"] .detail-block { background: rgba(255,255,255,.58); border-color: rgba(93, 65, 35, .12); }
+.app-shell[data-theme="light"] input,
+.app-shell[data-theme="light"] select { background: rgba(255,255,255,.72); color: #2f251a; border-color: rgba(93, 65, 35, .18); }
+.app-shell[data-theme="light"] .matrix { background: rgba(255,255,255,.62); }
+.app-shell[data-theme="light"] th { background: #f0dfc8; color: #94611e; border-bottom-color: rgba(93, 65, 35, .16); }
+.app-shell[data-theme="light"] td { color: #2f251a; border-bottom-color: rgba(93, 65, 35, .1); }
+.app-shell[data-theme="light"] .card-name { background: rgba(253, 245, 233, .97); }
+.app-shell[data-theme="light"] .group-row td { background: linear-gradient(90deg, rgba(232, 190, 120, .5), rgba(125, 190, 152, .35)); color: #5b3c13; }
+.app-shell[data-theme="light"] .prob-cell { color: #2f251a; background: linear-gradient(90deg, rgba(87, 158, 118, calc(var(--p) * .34)), rgba(87, 158, 118, calc(var(--p) * .16))), rgba(93,65,35,.035); }
+.app-shell[data-theme="light"] .prob-cell.mark-yes { background: linear-gradient(135deg, #e8b85e, #8fc9aa); color: #21170d; }
+.app-shell[data-theme="light"] .prob-cell.mark-no { background: rgba(143, 99, 83, .22); color: #6d5644; }
+.app-shell[data-theme="light"] tfoot td { background: #efe0ca; color: #5f4a35; }
+.app-shell[data-theme="light"] .log-item,
+.app-shell[data-theme="light"] .summary-list div,
+.app-shell[data-theme="light"] .prob-list div,
+.app-shell[data-theme="light"] .repeat-list div,
+.app-shell[data-theme="light"] .action-row { background: rgba(93,65,35,.06); color: #3a2b1d; }
+.app-shell[data-theme="light"] .guess-cell { color: #745f47; background: rgba(93,65,35,.04); }
+.app-shell[data-theme="light"] .guess-cell strong,
+.app-shell[data-theme="light"] .deduction-prob strong { color: #21693f; }
