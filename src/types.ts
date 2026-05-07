@@ -37,36 +37,36 @@ export type BehaviorCardStat = {
 export type BehaviorStats = Record<string, BehaviorCardStat>
 
 export const defaultCards: Card[] = [
-  { id: 'peacock', name: 'Peacock', type: 'suspect' },
-  { id: 'plum', name: 'Plum', type: 'suspect' },
   { id: 'mustard', name: 'Mustard', type: 'suspect' },
   { id: 'orchid', name: 'Orchid', type: 'suspect' },
-  { id: 'scarlett', name: 'Scarlett', type: 'suspect' },
   { id: 'green', name: 'Green', type: 'suspect' },
+  { id: 'scarlett', name: 'Scarlett', type: 'suspect' },
+  { id: 'peacock', name: 'Peacock', type: 'suspect' },
+  { id: 'plum', name: 'Plum', type: 'suspect' },
   { id: 'candlestick', name: 'Candlestick', type: 'weapon' },
   { id: 'dagger', name: 'Dagger', type: 'weapon' },
   { id: 'lead-pipe', name: 'Lead pipe', type: 'weapon' },
   { id: 'revolver', name: 'Revolver', type: 'weapon' },
   { id: 'rope', name: 'Rope', type: 'weapon' },
   { id: 'wrench', name: 'Wrench', type: 'weapon' },
+  { id: 'ballroom', name: 'Ballroom', type: 'room' },
+  { id: 'billiard-room', name: 'Billiard Room', type: 'room' },
   { id: 'conservatory', name: 'Conservatory', type: 'room' },
-  { id: 'lounge', name: 'Lounge', type: 'room' },
+  { id: 'dining-room', name: 'Dining Room', type: 'room' },
+  { id: 'hall', name: 'Hall', type: 'room' },
   { id: 'kitchen', name: 'Kitchen', type: 'room' },
   { id: 'library', name: 'Library', type: 'room' },
-  { id: 'hall', name: 'Hall', type: 'room' },
+  { id: 'lounge', name: 'Lounge', type: 'room' },
   { id: 'study', name: 'Study', type: 'room' },
-  { id: 'ballroom', name: 'Ballroom', type: 'room' },
-  { id: 'dining-room', name: 'Dining Room', type: 'room' },
-  { id: 'billiard-room', name: 'Billiard Room', type: 'room' },
 ]
 
 export const defaultPlayers: Player[] = [
-  { id: 'p1', name: 'Me', cardCount: 3, turnOrder: 1, isMe: true },
-  { id: 'p2', name: 'P2', cardCount: 3, turnOrder: 2 },
-  { id: 'p3', name: 'P3', cardCount: 3, turnOrder: 3 },
-  { id: 'p4', name: 'P4', cardCount: 3, turnOrder: 4 },
-  { id: 'p5', name: 'P5', cardCount: 3, turnOrder: 5 },
-  { id: 'p6', name: 'P6', cardCount: 3, turnOrder: 6 },
+  { id: 'p1', name: 'Mustard', cardCount: 3, turnOrder: 1, isMe: true },
+  { id: 'p2', name: 'Orchid', cardCount: 3, turnOrder: 2 },
+  { id: 'p3', name: 'Green', cardCount: 3, turnOrder: 3 },
+  { id: 'p4', name: 'Scarlett', cardCount: 3, turnOrder: 4 },
+  { id: 'p5', name: 'Peacock', cardCount: 3, turnOrder: 5 },
+  { id: 'p6', name: 'Plum', cardCount: 3, turnOrder: 6 },
 ]
 
 export function createBlankMarks(cards = defaultCards, players = defaultPlayers) {
