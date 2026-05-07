@@ -323,7 +323,6 @@ function App() {
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
           <SuggestionForm key={game.activeSuggesterId} game={game} onAdd={addSuggestion} onSkip={skipSuggester} />
-          <EvidenceLog game={game} />
         </aside>
 
         <section className="matrix-panel panel">
@@ -340,6 +339,7 @@ function App() {
           {matrixMode === 'probabilities'
             ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={(cell) => { setSelected(cell); setQuickMark(cell) }} onSetMark={setMark} onOpenCard={setDetailCardId} />
             : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} />}
+          <EvidenceLog game={game} solver={solver} />
         </section>
 
         <aside className="inspector panel">
@@ -768,12 +768,45 @@ function SelectionInspector({ selectedCard, selectedLocation, selected, solver, 
   </section>
 }
 
-function EvidenceLog({ game }: { game: GameState }) {
-  return <section><h2>Evidence log</h2><div className="log-list">{game.suggestions.slice(0, 8).map((s) => <div className="log-item" key={s.id}><strong>{playerById(game.players, s.suggesterId)?.name}</strong> guessed {s.cardIds.map((id) => cardById(game.cards, id)?.name).join(', ')}<small>{resultText(game, s)}</small></div>)}</div></section>
+function EvidenceLog({ game, solver }: { game: GameState; solver: SolverResult }) {
+  return <section className="matrix-subsection evidence-log">
+    <h2>Evidence log</h2>
+    <div className="log-list">
+      {game.suggestions.length ? game.suggestions.slice(0, 8).map((s) => {
+        const guessedCards = s.cardIds.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
+        return <article className="log-item action-row" key={s.id}>
+          <div className="action-main">
+            <strong>{playerById(game.players, s.suggesterId)?.name ?? 'Unknown player'}</strong>
+            <span>guessed {guessedCards.map((card) => card.name).join(' / ')}</span>
+          </div>
+          <p>{resultText(game, s)}</p>
+          <DisproverProbabilities game={game} solver={solver} suggestion={s} cards={guessedCards} />
+          <time>{new Date(s.createdAt).toLocaleString()}</time>
+        </article>
+      }) : <p className="muted">No evidence logged yet.</p>}
+    </div>
+  </section>
+}
+
+function DisproverProbabilities({ game, solver, suggestion, cards }: { game: GameState; solver: SolverResult; suggestion: Suggestion; cards: Card[] }) {
+  const disproverId = suggestion.result.kind === 'unknown' || suggestion.result.kind === 'shown' ? suggestion.result.disproverId : null
+  if (!disproverId) return null
+  const disprover = playerById(game.players, disproverId)?.name ?? 'Unknown player'
+  return <div className="card-prob-strip" aria-label={`Probability ${disprover} has each guessed card`}>
+    {cards.map((card) => {
+      const mark = game.marks[card.id]?.[disproverId] ?? 'unknown'
+      const wasShown = suggestion.result.kind === 'shown' && suggestion.result.shownCardId === card.id
+      const label = wasShown ? 'shown' : mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : pct(solver.probabilities[card.id]?.[disproverId] ?? 0)
+      return <span className={`prob-chip ${wasShown ? 'shown' : ''}`} key={card.id}>
+        <span>{card.name}</span>
+        <strong>{label}</strong>
+      </span>
+    })}
+  </div>
 }
 function resultText(game: GameState, s: Suggestion) {
   if (s.result.kind === 'nobody') return 'Nobody could disprove'
-  if (s.result.kind === 'unknown') return `${playerById(game.players, s.result.disproverId)?.name} disproved with unknown card`
+  if (s.result.kind === 'unknown') return `${playerById(game.players, s.result.disproverId)?.name} disproved; chance they hold each guessed card:`
   if (s.result.kind === 'shown') return `${playerById(game.players, s.result.disproverId)?.name} showed ${cardById(game.cards, s.result.shownCardId)?.name}`
   return 'Logged only'
 }

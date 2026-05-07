@@ -63,13 +63,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   box-shadow: 0 28px 80px rgba(0,0,0,.34);
 }
 .sidebar, .inspector { padding: 12px; display: grid; gap: 12px; }
-.matrix-panel { padding: 14px; overflow: visible; }
+.matrix-panel { padding: 14px; overflow: visible; display: grid; gap: 14px; }
 h1, h2, p { margin-top: 0; }
 h1 { font-size: clamp(26px, 3vw, 42px); line-height: 1; margin-bottom: 9px; letter-spacing: -.04em; }
 h2 { font-size: 15px; text-transform: uppercase; color: #e8be78; letter-spacing: .11em; margin-bottom: 12px; }
 p, .muted { color: #bda98b; line-height: 1.5; }
 .matrix-head { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 16px; }
-.setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section {
+.setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section, .matrix-subsection {
   padding: 12px;
   background: rgba(255,255,255,.045);
   border: 1px solid rgba(255,255,255,.08);
@@ -121,7 +121,7 @@ td { padding: 7px 5px; border-bottom: 1px solid rgba(246, 219, 176, .08); color:
 .big-prob { font-size: 54px; font-weight: 950; letter-spacing: -.07em; color: #e8be78; margin: 10px 0; }
 .button-row { display:flex; gap: 8px; flex-wrap: wrap; }
 .hint { padding: 10px; background: rgba(124, 178, 151, .12); border-radius: 13px; font-size: 13px; margin-top: 12px; }
-.log-list { display: grid; gap: 9px; max-height: 240px; overflow: auto; }
+.log-list { display: grid; gap: 9px; max-height: 300px; overflow: auto; }
 .log-item { padding: 10px; border-radius: 14px; background: rgba(0,0,0,.18); color: #e7d4b6; font-size: 13px; }
 .log-item small { display: block; color: #a99475; margin-top: 5px; }
 .top-hints { display: grid; gap: 7px; margin: 12px 0; }
@@ -240,6 +240,24 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
 .action-row time { color: #7f6f5b; font-size: 11px; }
 .action-main { display: flex; gap: 8px; flex-wrap: wrap; color: #f4e5cb; }
 .action-main strong { color: #e8be78; }
+.card-prob-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.prob-chip {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.06);
+  color: #eed6ae;
+}
+.prob-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prob-chip strong { color: #b9f0cf; }
+.prob-chip.shown strong { color: #e8be78; text-transform: uppercase; }
 @media (max-width: 820px) {
   .modal-backdrop { padding: 10px; place-items: stretch; }
   .card-modal { max-height: calc(100vh - 20px); padding: 16px; }
@@ -283,7 +301,7 @@ th:first-child { width: 124px; }
   .workspace { grid-template-columns: 220px minmax(0, 1fr) 230px; gap: 10px; padding: 10px; }
   .sidebar, .inspector { padding: 10px; gap: 10px; }
   .matrix-panel { padding: 12px; }
-  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { padding: 10px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section, .matrix-subsection { padding: 10px; }
   .prob-cell { font-size: 12px; }
   .guess-cell strong { font-size: 17px; }
   .guess-cell small { font-size: 11px; }
@@ -301,7 +319,7 @@ th:first-child { width: 124px; }
   .matrix-panel { order: 2; padding: 10px; }
   .inspector { order: 3; padding: 8px; gap: 10px; }
   .panel { border-radius: 20px; }
-  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { border-radius: 16px; padding: 10px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section, .matrix-subsection { border-radius: 16px; padding: 10px; }
   h1 { font-size: 25px; }
   h2 { font-size: 12px; margin-bottom: 9px; }
   p, .muted { font-size: 13px; }
@@ -439,7 +457,8 @@ th:first-child { width: 124px; }
   .topbar { padding: 8px; gap: 8px; }
   .sidebar, .inspector { padding: 6px; gap: 8px; }
   .matrix-panel { padding: 8px; }
-  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { padding: 8px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section, .matrix-subsection { padding: 8px; }
+  .card-prob-strip { grid-template-columns: 1fr; gap: 6px; }
   button { padding: 8px 9px; }
   input, select { padding: 8px 9px; }
   h1 { font-size: 23px; }
@@ -485,6 +504,7 @@ th:first-child { width: 124px; }
 .app-shell[data-theme="light"] .behavior-card,
 .app-shell[data-theme="light"] .inspector section,
 .app-shell[data-theme="light"] .sidebar section,
+.app-shell[data-theme="light"] .matrix-subsection,
 .app-shell[data-theme="light"] .detail-block { background: rgba(255,255,255,.58); border-color: rgba(93, 65, 35, .12); }
 .app-shell[data-theme="light"] input,
 .app-shell[data-theme="light"] select { background: rgba(255,255,255,.72); color: #2f251a; border-color: rgba(93, 65, 35, .18); }
@@ -501,7 +521,8 @@ th:first-child { width: 124px; }
 .app-shell[data-theme="light"] .summary-list div,
 .app-shell[data-theme="light"] .prob-list div,
 .app-shell[data-theme="light"] .repeat-list div,
-.app-shell[data-theme="light"] .action-row { background: rgba(93,65,35,.06); color: #3a2b1d; }
+.app-shell[data-theme="light"] .action-row,
+.app-shell[data-theme="light"] .prob-chip { background: rgba(93,65,35,.06); color: #3a2b1d; }
 .app-shell[data-theme="light"] .guess-cell { color: #745f47; background: rgba(93,65,35,.04); }
 .app-shell[data-theme="light"] .guess-cell strong,
 .app-shell[data-theme="light"] .deduction-prob strong { color: #21693f; }
