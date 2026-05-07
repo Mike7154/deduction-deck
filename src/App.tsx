@@ -820,15 +820,14 @@ function SelectionInspector({ selectedCard, selectedLocation, selected, solver, 
 }
 
 function EvidenceLog({ game, solver, likelyBadSuggestionIds, onToggleDisabled }: { game: GameState; solver: SolverResult; likelyBadSuggestionIds: Set<string>; onToggleDisabled: (id: string, disabled: boolean) => void }) {
-  const showAll = solver.status === 'contradiction'
-  const suggestions = showAll ? game.suggestions : game.suggestions.slice(0, 8)
   return <section className="matrix-subsection evidence-log">
     <h2>Evidence log</h2>
+    <p className="microcopy">Probabilities below use the current board, so older entries update as new evidence is added.</p>
     {solver.status === 'contradiction' && <p className="hint danger-hint">
       Contradiction found. Highlighted entries are likely suspects because disabling that single entry makes the board valid again.
     </p>}
     <div className="log-list">
-      {suggestions.length ? suggestions.map((s) => {
+      {game.suggestions.length ? game.suggestions.map((s) => {
         const guessedCards = s.cardIds.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
         const likelyBad = likelyBadSuggestionIds.has(s.id)
         return <article className={`log-item action-row ${s.disabled ? 'disabled-evidence' : ''} ${likelyBad ? 'likely-bad-evidence' : ''}`} key={s.id}>
