@@ -116,6 +116,15 @@ function suggestedCards(game: GameState, ids: [string, string, string]) {
   return ids.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
 }
 
+function possibleShownCards(game: GameState, solver: SolverResult, ids: [string, string, string], playerId: string) {
+  const cards = suggestedCards(game, ids)
+  const possible = cards.filter((card) => {
+    const mark = game.marks[card.id]?.[playerId]
+    return mark === 'yes' || (mark !== 'no' && (solver.probabilities[card.id]?.[playerId] ?? 0) > 0)
+  })
+  return possible.length ? possible : cards.filter((card) => game.marks[card.id]?.[playerId] !== 'no')
+}
+
 function respondersAfter(game: GameState, suggesterId: string) {
   const players = orderedPlayers(game.players)
   const start = players.findIndex((p) => p.id === suggesterId)
@@ -413,7 +422,7 @@ function App() {
       <main className="workspace">
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
-          <SuggestionForm key={game.activeSuggesterId} game={game} onAdd={addSuggestion} onSkip={skipSuggester} />
+          <SuggestionForm key={game.activeSuggesterId} game={game} solver={solver} onAdd={addSuggestion} onSkip={skipSuggester} />
         </aside>
 
         <section className="matrix-panel panel">
@@ -686,7 +695,7 @@ function QuickMarkSheet({ card, locationName, onSet, onClose }: { card: Card; lo
   </div>
 }
 
-function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: Suggestion) => void; onSkip: () => void }) {
+function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solver: SolverResult; onAdd: (s: Suggestion) => void; onSkip: () => void }) {
   const firstByType = (type: CardType) => game.cards.find((c) => c.type === type)!.id
   const [suspect, setSuspect] = useState(firstByType('suspect'))
   const [weapon, setWeapon] = useState(firstByType('weapon'))
@@ -705,7 +714,8 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
   const exactCardKnown = canDisprove && (suggester.isMe || playerById(game.players, disproverId)?.isMe)
   const selectedCardIds: [string, string, string] = [suspect, weapon, room]
   const selectedCards = suggestedCards(game, selectedCardIds)
-  const safeShownCardId = selectedCardIds.includes(shownCardId) ? shownCardId : suspect
+  const shownCardOptions = canDisprove ? possibleShownCards(game, solver, selectedCardIds, disproverId) : selectedCards
+  const safeShownCardId = shownCardOptions.some((card) => card.id === shownCardId) ? shownCardId : shownCardOptions[0]?.id ?? suspect
   const displayedResultKind = exactCardKnown && resultKind === 'unknown' ? 'shown' : resultKind
   const resultOptions = canDisprove
     ? [['unknown','Disproved, unknown card'], ['shown','Showed exact card'], ['nobody','Nobody disproved'], ['unresolved','Only log guess']]
@@ -731,8 +741,10 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
 
   function markCanDisprove(cardId?: string) {
     if (!currentResponder) return
+    const currentOptions = possibleShownCards(game, solver, selectedCardIds, currentResponder.id)
+    const fallbackShownCardId = currentOptions[0]?.id ?? suspect
     const result: SuggestionResult = cardId || suggester.isMe || currentResponder.isMe
-      ? { kind: 'shown', disproverId: currentResponder.id, shownCardId: cardId ?? suspect }
+      ? { kind: 'shown', disproverId: currentResponder.id, shownCardId: cardId ?? fallbackShownCardId }
       : { kind: 'unknown', disproverId: currentResponder.id }
     submit(result)
   }
@@ -746,7 +758,7 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
       <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
       <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
       {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={selectedCards.map((card) => [card.id, card.name])} />}
+      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, card.name])} />}
     </div>
     {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
     <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
@@ -765,7 +777,7 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
           <strong>{currentResponder.name}{currentResponder.id === me?.id ? ' (Me)' : ''}</strong>
           {(suggester.isMe || currentResponder.isMe) ? <div className="shown-card-buttons">
             <p className="microcopy">If they can disprove, choose the exact card shown.</p>
-            {selectedCards.map((card) => <button className="primary" key={card.id} onClick={() => markCanDisprove(card.id)}>Showed {card.name}</button>)}
+            {possibleShownCards(game, solver, selectedCardIds, currentResponder.id).map((card) => <button className="primary" key={card.id} onClick={() => markCanDisprove(card.id)}>Showed {card.name}</button>)}
           </div> : <button className="primary wide" onClick={() => markCanDisprove()}>Can disprove</button>}
           <button className="wide" onClick={markCannotDisprove}>Cannot disprove</button>
         </div> : <button className="primary wide" onClick={() => submit({ kind: 'nobody' })}>Nobody disproved</button>}
