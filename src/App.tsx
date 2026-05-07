@@ -127,6 +127,7 @@ function App() {
   const [stats, setStats] = useState<BehaviorStats>(() => userEmail ? loadStats(userEmail) : {})
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
+  const [detailCardId, setDetailCardId] = useState<string | null>(null)
   const solver = useMemo(() => solveGame(game), [game])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
 
@@ -138,12 +139,14 @@ function App() {
     setStats(loadStats(normalized))
     setSelected(null)
     setMatrixMode('probabilities')
+    setDetailCardId(null)
   }
 
   function logout() {
     localStorage.removeItem(sessionKey)
     setUserEmail(null)
     setSelected(null)
+    setDetailCardId(null)
   }
 
   function updateGame(next: GameState) {
@@ -205,6 +208,7 @@ function App() {
 
   const selectedCard = selected ? cardById(game.cards, selected.cardId) : null
   const selectedLocation = selected?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, selected?.locationId ?? '')?.name
+  const detailCard = detailCardId ? cardById(game.cards, detailCardId) : null
 
   if (!userEmail) return <AuthScreen onAuthenticated={activateUser} />
 
@@ -230,8 +234,8 @@ function App() {
             </div>
           </div>
           {matrixMode === 'probabilities'
-            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} onSelect={setSelected} onSetMark={setMark} />
-            : <GuessMatrix game={game} locations={locations.filter((loc) => loc !== 'envelope')} />}
+            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} onSelect={setSelected} onSetMark={setMark} onOpenCard={setDetailCardId} />
+            : <GuessMatrix game={game} locations={locations.filter((loc) => loc !== 'envelope')} onOpenCard={setDetailCardId} />}
         </section>
 
         <aside className="inspector panel">
@@ -240,6 +244,7 @@ function App() {
           <BehaviorPanel game={game} stats={stats} onFinish={finishGame} />
         </aside>
       </main>
+      {detailCard && <CardDetailModal card={detailCard} game={game} solver={solver} onClose={() => setDetailCardId(null)} />}
     </div>
   )
 }
@@ -377,19 +382,19 @@ function CardSelect({ label, type, game, value, onChange }: { label: string; typ
   return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, c.name])} />
 }
 
-function ProbabilityMatrix({ game, solver, locations, selected, onSelect, onSetMark }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void }) {
+function ProbabilityMatrix({ game, solver, locations, selected, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
   return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{loc === 'envelope' ? 'Envelope' : playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
-    {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} onSelect={onSelect} onSetMark={onSetMark} />)}
+    {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
   </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc}>3 cards</td> : <td key={loc}>{countsFor(game, loc).known} known<br />{countsFor(game, loc).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
 }
 
-function GroupedRows({ type, game, solver, locations, selected, onSelect, onSetMark }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void }) {
+function GroupedRows({ type, game, solver, locations, selected, onSelect, onSetMark, onOpenCard }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
   return <>
     <tr className="group-row"><td colSpan={locations.length + 1}>{typeLabel[type]}</td></tr>
     {game.cards.filter((c) => c.type === type).map((card) => {
       const envelopeOut = game.marks[card.id].envelope === 'no' || (solver.probabilities[card.id]?.envelope ?? 0) === 0
       return <tr className={envelopeOut ? 'not-envelope-row' : ''} key={card.id}>
-        <td className="card-name">{card.name}</td>
+        <td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>
         {locations.map((loc) => {
           const mark = game.marks[card.id][loc]
           const prob = solver.probabilities[card.id]?.[loc] ?? 0
@@ -403,17 +408,101 @@ function GroupedRows({ type, game, solver, locations, selected, onSelect, onSetM
   </>
 }
 
-function GuessMatrix({ game, locations }: { game: GameState; locations: LocationId[] }) {
+function GuessMatrix({ game, locations, onOpenCard }: { game: GameState; locations: LocationId[]; onOpenCard: (cardId: string) => void }) {
   return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <>
       <tr className="group-row" key={`${type}-group`}><td colSpan={locations.length + 1}>{typeLabel[type]}</td></tr>
-      {game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name">{card.name}</td>{locations.map((loc) => {
+      {game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
         const count = guessCount(game, loc, card.id)
         const mark = game.marks[card.id][loc]
         return <td className={`guess-cell ${count > 0 ? 'has-guesses' : ''}`} key={loc}><strong>{count}</strong><small>{mark === 'yes' ? 'known held' : mark === 'no' ? 'ruled out' : 'unknown'}</small></td>
       })}</tr>)}
     </>)}
   </tbody></table></div>
+}
+
+
+function CardDetailModal({ card, game, solver, onClose }: { card: Card; game: GameState; solver: SolverResult; onClose: () => void }) {
+  const involved = game.suggestions.filter((s) => s.cardIds.includes(card.id))
+  const repeatedByPlayer = orderedPlayers(game.players)
+    .map((player) => ({ player, count: involved.filter((s) => s.suggesterId === player.id).length }))
+    .filter(({ count }) => count > 0)
+    .sort((a, b) => b.count - a.count)
+  const envelopeProbability = solver.probabilities[card.id]?.envelope ?? 0
+  const holderProbabilities = orderedPlayers(game.players)
+    .map((player) => ({ player, probability: solver.probabilities[card.id]?.[player.id] ?? 0, mark: game.marks[card.id]?.[player.id] ?? 'unknown' }))
+    .sort((a, b) => b.probability - a.probability)
+
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="card-detail-title" onClick={onClose}>
+    <section className="card-modal panel" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head">
+        <div>
+          <h1 id="card-detail-title">{card.name}</h1>
+          <p>{typeLabel[card.type]} card - involved in {involved.length} logged suggestion{involved.length === 1 ? '' : 's'}</p>
+        </div>
+        <button onClick={onClose}>Close</button>
+      </div>
+
+      <div className="card-detail-grid">
+        <section className="detail-block emphasis-block">
+          <span>Envelope odds</span>
+          <strong>{pct(envelopeProbability)}</strong>
+          <p>If a player repeats this card and nobody reliably disproves it, this number is the hard-solver signal to watch.</p>
+        </section>
+        <section className="detail-block">
+          <h2>Most likely holders</h2>
+          <div className="prob-list">{holderProbabilities.slice(0, 4).map(({ player, probability, mark }) => <div key={player.id}><span>{player.name}</span><strong>{mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : pct(probability)}</strong></div>)}</div>
+        </section>
+        <section className="detail-block">
+          <h2>Repeat guesses</h2>
+          <div className="repeat-list">{repeatedByPlayer.length ? repeatedByPlayer.map(({ player, count }) => <div key={player.id}><strong>{count}</strong><span>{player.name}</span></div>) : <p className="muted">No one has guessed this card yet.</p>}</div>
+        </section>
+      </div>
+
+      <section className="detail-block action-history">
+        <h2>Action history</h2>
+        {involved.length ? involved.map((suggestion) => <CardActionRow key={suggestion.id} card={card} game={game} solver={solver} suggestion={suggestion} />) : <p className="muted">No logged suggestions include this card.</p>}
+      </section>
+    </section>
+  </div>
+}
+
+function CardActionRow({ card, game, solver, suggestion }: { card: Card; game: GameState; solver: SolverResult; suggestion: Suggestion }) {
+  const suggester = playerById(game.players, suggestion.suggesterId)?.name ?? 'Unknown player'
+  const guessedCards = suggestion.cardIds.map((id) => cardById(game.cards, id)).filter((c): c is Card => Boolean(c))
+  const otherCards = guessedCards.filter((c) => c.id !== card.id)
+  const result = suggestion.result
+  const time = new Date(suggestion.createdAt).toLocaleString()
+
+  let resultLine = 'Only logged; no disproof result recorded.'
+  let alternateLine = ''
+
+  if (result.kind === 'nobody') {
+    resultLine = 'Nobody disproved this suggestion.'
+    alternateLine = 'That keeps envelope pressure on all three guessed cards unless other evidence rules them out.'
+  } else if (result.kind === 'unknown') {
+    const disprover = playerById(game.players, result.disproverId)?.name ?? 'Unknown player'
+    const selectedProb = solver.probabilities[card.id]?.[result.disproverId] ?? 0
+    const alternatives = otherCards
+      .map((other) => ({ card: other, probability: solver.probabilities[other.id]?.[result.disproverId] ?? 0, mark: game.marks[other.id]?.[result.disproverId] ?? 'unknown' }))
+      .sort((a, b) => b.probability - a.probability)
+    resultLine = `${disprover} disproved it, but the shown card is unknown.`
+    alternateLine = alternatives.length
+      ? `If it was not ${card.name} (${pct(selectedProb)} for ${disprover}), likely alternatives: ${alternatives.map(({ card: other, probability, mark }) => `${other.name} ${mark === 'yes' ? 'YES' : mark === 'no' ? 'ruled out' : pct(probability)}`).join(', ')}.`
+      : ''
+  } else if (result.kind === 'shown') {
+    const disprover = playerById(game.players, result.disproverId)?.name ?? 'Unknown player'
+    const shown = cardById(game.cards, result.shownCardId)
+    resultLine = shown?.id === card.id ? `${disprover} showed this exact card.` : `${disprover} disproved it by showing ${shown?.name ?? 'another card'}.`
+    alternateLine = shown?.id === card.id ? 'This is direct evidence for this card holder.' : `So this action does not prove ${card.name} was held by ${disprover}.`
+  }
+
+  return <article className="action-row">
+    <div className="action-main"><strong>{suggester}</strong><span>guessed {guessedCards.map((c) => c.name).join(' / ')}</span></div>
+    <p>{resultLine}</p>
+    {alternateLine && <small>{alternateLine}</small>}
+    <time>{time}</time>
+  </article>
 }
 
 function CurrentDeduction({ game, solver }: { game: GameState; solver: SolverResult }) {
@@ -472,4 +561,5 @@ function BehaviorPanel({ game, stats, onFinish }: { game: GameState; stats: Beha
 }
 
 export default App
+
 
