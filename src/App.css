@@ -345,3 +345,55 @@ th:first-child { width: 124px; }
   .prob-cell { font-size: 11px; }
   .guess-cell small { font-size: 9px; }
 }
+
+/* Phone-first setup screen refinements */
+@media (max-width: 640px) {
+  .setup-shell .topbar { gap: 10px; }
+  .setup-shell .topbar nav { grid-template-columns: 1fr 1fr; }
+  .setup-workspace { padding: 6px; }
+  .setup-editor { padding: 10px; border-radius: 18px; box-shadow: none; }
+  .setup-hero { gap: 10px; margin-bottom: 10px; }
+  .setup-hero h1 { font-size: 24px; margin-bottom: 6px; }
+  .setup-hero p { margin-bottom: 0; }
+  .setup-total { min-width: 0; width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 14px; }
+  .setup-total strong { font-size: 22px; }
+  .setup-section { padding: 10px; margin-bottom: 10px; }
+  .section-head { gap: 8px; margin-bottom: 10px; }
+  .section-head h2 { margin: 0; }
+  .section-head > div { gap: 7px; }
+  .setup-player-list { gap: 10px; }
+  .setup-player-row {
+    grid-template-columns: 64px minmax(0, 1fr) 76px;
+    grid-template-areas:
+      "move name cards"
+      "remove remove remove";
+    align-items: end;
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(0,0,0,.16);
+    border: 1px solid rgba(246, 219, 176, .08);
+  }
+  .setup-player-row .reorder-buttons { grid-area: move; grid-template-columns: 1fr; }
+  .setup-player-row .field:nth-of-type(1) { grid-area: name; }
+  .setup-player-row .field:nth-of-type(2) { grid-area: cards; }
+  .setup-player-row > button { grid-area: remove; padding: 8px; }
+  .setup-player-row .reorder-buttons button { padding: 7px 4px; font-size: 11px; }
+  .field span { font-size: 11px; }
+  .card-type-editor { padding: 10px; border-radius: 14px; margin-bottom: 10px; }
+  .card-type-head { flex-direction: row; align-items: center; gap: 8px; }
+  .card-type-head button { padding: 8px 9px; font-size: 12px; }
+  .card-edit-list { gap: 7px; }
+  .card-edit-row { grid-template-columns: minmax(0, 1fr) 78px; gap: 6px; }
+  .card-edit-row button { padding: 8px 6px; font-size: 12px; }
+  .setup-footer { gap: 10px; padding: 10px; border-radius: 14px; }
+  .setup-errors { display: grid; gap: 6px; font-size: 12px; }
+  .setup-errors span { border-radius: 12px; }
+  .start-button { width: 100%; min-width: 0; }
+}
+@media (max-width: 380px) {
+  .setup-player-row { grid-template-columns: 54px minmax(0, 1fr) 66px; padding: 8px; }
+  .setup-player-row .reorder-buttons button { font-size: 10px; }
+  .card-edit-row { grid-template-columns: minmax(0, 1fr) 70px; }
+  .card-type-head h3 { font-size: 12px; letter-spacing: .06em; }
+  .card-type-head button, .card-edit-row button { font-size: 11px; }
+}
