@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
 import './App.css'
 import { createBlankMarks, createDefaultGame, defaultCards, defaultPlayers, type BehaviorStats, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
 import { solveGame, type SolverResult } from './solver'
@@ -414,6 +414,19 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
   const errors = setupErrors(draft)
   const dealtCards = Math.max(0, draft.cards.length - 3)
 
+  function moveBetweenSetupNames(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return
+    const nameFields = Array.from(document.querySelectorAll<HTMLInputElement>('[data-setup-name="true"]'))
+      .filter((input) => !input.disabled)
+    const currentIndex = nameFields.indexOf(event.currentTarget)
+    const nextIndex = currentIndex + (event.shiftKey ? -1 : 1)
+    const nextField = nameFields[nextIndex]
+    if (!nextField) return
+    event.preventDefault()
+    nextField.focus()
+    nextField.select()
+  }
+
   function setDraft(next: GameState) {
     onChange({ ...next, players: renumberPlayers(next.players) })
   }
@@ -487,7 +500,7 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
           <div className="setup-player-list">
             {orderedPlayers(draft.players).map((p, index) => <div className="setup-player-row" key={p.id}>
               <div className="reorder-buttons"><button aria-label={`Move ${p.name} earlier`} disabled={index === 0} onClick={() => movePlayer(p.id, -1)}>Up</button><button aria-label={`Move ${p.name} later`} disabled={index === draft.players.length - 1} onClick={() => movePlayer(p.id, 1)}>Down</button></div>
-              <label className="field"><span>Name</span><input value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} /></label>
+              <label className="field"><span>Name</span><input data-setup-name="true" value={p.name} onKeyDown={moveBetweenSetupNames} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} /></label>
               <label className="field"><span>Cards</span><input type="number" min="0" max={draft.cards.length} value={p.cardCount} onChange={(e) => updatePlayer(p.id, { cardCount: Number(e.target.value) })} /></label>
               <button onClick={() => removePlayer(p.id)} disabled={draft.players.length <= 1}>Remove</button>
             </div>)}
@@ -500,7 +513,7 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
             <div className="card-type-head"><h3>{typeLabel[type]}</h3><button onClick={() => addCard(type)}>Add {type}</button></div>
             <div className="card-edit-list">
               {draft.cards.filter((card) => card.type === type).map((card) => <div className="card-edit-row" key={card.id}>
-                <input value={card.name} onChange={(e) => updateCard(card.id, { name: e.target.value })} />
+                <input data-setup-name="true" value={card.name} onKeyDown={moveBetweenSetupNames} onChange={(e) => updateCard(card.id, { name: e.target.value })} />
                 <button onClick={() => removeCard(card.id)} disabled={draft.cards.filter((c) => c.type === type).length <= 1}>Remove</button>
               </div>)}
             </div>
