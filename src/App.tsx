@@ -220,6 +220,14 @@ function App() {
     localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(hydrated))
   }
 
+  function replaceGame(next: GameState) {
+    if (!userEmail) return
+    const hydrated = hydrateGame(next)
+    setUndoStack([])
+    setGame(hydrated)
+    localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(hydrated))
+  }
+
   function undoLastChange() {
     const [previous, ...rest] = undoStack
     if (!previous || !userEmail) return
@@ -290,7 +298,7 @@ function App() {
   const quickMarkLocation = quickMark?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, quickMark?.locationId ?? '')?.name
 
   if (!userEmail) return <AuthScreen onAuthenticated={activateUser} />
-  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { updateGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setDetailCardId(null); setMatrixMode('probabilities') }} onLogout={logout} />
+  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { replaceGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setQuickMark(null); setDetailCardId(null); setMatrixMode('probabilities') }} onLogout={logout} />
   if (!solver) return null
 
   return (
