@@ -13,6 +13,7 @@ export type SolverResult = {
 
 type Clause = { playerId: string; cardIds: string[]; kind: 'atLeastOne' }
 type NoFact = { playerId: string; cardIds: string[] }
+type CountResult = { worlds: bigint; counts: bigint[] }
 
 
 function orderedPlayers(players: Player[]) {
@@ -69,115 +70,126 @@ function forcedLocation(marks: Record<LocationId, Mark>) {
 }
 
 export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
-  const locations: LocationId[] = ['envelope', ...game.players.map((p) => p.id)]
-  const counts = Object.fromEntries(game.players.map((p) => [p.id, p.cardCount])) as Record<string, number>
-  const remaining = { ...counts }
+  const players = orderedPlayers(game.players)
+  const locations: LocationId[] = ['envelope', ...players.map((p) => p.id)]
+  const playerIndex = Object.fromEntries(players.map((p, i) => [p.id, i])) as Record<string, number>
+  const locationIndex = Object.fromEntries(locations.map((loc, i) => [loc, i])) as Record<LocationId, number>
+  const remaining = players.map((p) => p.cardCount)
   const envelopeRemaining: Record<CardType, number> = { suspect: 1, weapon: 1, room: 1 }
-  const assignment: Record<string, LocationId> = {}
   const probabilities = emptyProbabilities(game.cards, locations)
   const messages: string[] = []
-  const { noFacts, clauses, yesFacts } = suggestionFacts(game.players, game.suggestions)
+  const { noFacts, clauses, yesFacts } = suggestionFacts(players, game.suggestions)
 
   const hardMarks: GameState['marks'] = structuredClone(game.marks)
   for (const no of noFacts) for (const cardId of no.cardIds) hardMarks[cardId][no.playerId] = hardMarks[cardId][no.playerId] === 'yes' ? 'yes' : 'no'
   for (const yes of yesFacts) hardMarks[yes.cardId][yes.playerId] = 'yes'
+  const clauseCardSets = clauses.map((clause) => new Set(clause.cardIds))
+  const valueCount = game.cards.length * locations.length
 
   for (const card of game.cards) {
     const f = forcedLocation(hardMarks[card.id])
     if (f === '__conflict__') return contradiction(game, maxWorlds, 'A card is marked yes in more than one location.')
     if (f) {
-      assignment[card.id] = f
       if (f === 'envelope') envelopeRemaining[card.type] -= 1
-      else remaining[f] -= 1
-      if ((f === 'envelope' && envelopeRemaining[card.type] < 0) || (f !== 'envelope' && remaining[f] < 0)) {
+      else remaining[playerIndex[f]] -= 1
+      if ((f === 'envelope' && envelopeRemaining[card.type] < 0) || (f !== 'envelope' && remaining[playerIndex[f]] < 0)) {
         return contradiction(game, maxWorlds, 'Known yes facts exceed an envelope or player card-count limit.')
       }
     }
   }
 
   const allowedFor = (card: Card): LocationId[] => {
-    if (assignment[card.id]) return [assignment[card.id]]
+    const forced = forcedLocation(hardMarks[card.id])
+    if (forced && forced !== '__conflict__') return [forced]
     return locations.filter((loc) => hardMarks[card.id][loc] !== 'no')
   }
 
   const cardsToAssign = game.cards
-    .filter((c) => !assignment[c.id])
+    .filter((c) => !forcedLocation(hardMarks[c.id]))
     .sort((a, b) => allowedFor(a).length - allowedFor(b).length)
 
-  let worlds = 0
-  let capped = false
-  const envelopeCombos: Record<string, number> = {}
+  let initialClauseMask = 0
+  for (const [clauseIndex, clause] of clauses.entries()) {
+    if (clause.cardIds.some((cardId) => forcedLocation(hardMarks[cardId]) === clause.playerId)) initialClauseMask |= 1 << clauseIndex
+  }
 
-  const possibleClause = (clause: Clause) => clause.cardIds.some((cardId) => assignment[cardId] === clause.playerId || (!assignment[cardId] && allowedFor(game.cards.find((c) => c.id === cardId)!).includes(clause.playerId)))
-  const satisfiedClause = (clause: Clause) => clause.cardIds.some((cardId) => assignment[cardId] === clause.playerId)
-
-  function canFinishCounts(index: number) {
+  function canFinishCounts(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>) {
     const unassigned = cardsToAssign.slice(index)
-    for (const p of game.players) {
-      if (remaining[p.id] < 0) return false
+    for (const [i, p] of players.entries()) {
+      if (playerRemaining[i] < 0) return false
       const possible = unassigned.filter((c) => allowedFor(c).includes(p.id)).length
-      if (possible < remaining[p.id]) return false
+      if (possible < playerRemaining[i]) return false
     }
-    for (const t of Object.keys(envelopeRemaining) as CardType[]) {
-      if (envelopeRemaining[t] < 0) return false
+    for (const t of Object.keys(envelopeByType) as CardType[]) {
+      if (envelopeByType[t] < 0) return false
       const possible = unassigned.filter((c) => c.type === t && allowedFor(c).includes('envelope')).length
-      if (possible < envelopeRemaining[t]) return false
+      if (possible < envelopeByType[t]) return false
     }
     return true
   }
 
-  function isAllowed(card: Card, loc: LocationId) {
-    if (hardMarks[card.id][loc] === 'no') return false
-    if (loc === 'envelope') return envelopeRemaining[card.type] > 0
-    return remaining[loc] > 0
-  }
-
-  function recordWorld() {
-    worlds++
-    for (const card of game.cards) probabilities[card.id][assignment[card.id]] += 1
-    const byType = Object.fromEntries(game.cards.filter((card) => assignment[card.id] === 'envelope').map((card) => [card.type, card.id])) as Record<CardType, string>
-    const key = `${byType.suspect}|${byType.weapon}|${byType.room}`
-    envelopeCombos[key] = (envelopeCombos[key] ?? 0) + 1
-  }
-
-  function recurse(index: number) {
-    if (capped) return
-    if (worlds >= maxWorlds) {
-      capped = true
-      return
-    }
-    if (!canFinishCounts(index)) return
-    if (clauses.some((clause) => !possibleClause(clause))) return
-    if (index === cardsToAssign.length) {
-      if (Object.values(remaining).some((n) => n !== 0)) return
-      if (Object.values(envelopeRemaining).some((n) => n !== 0)) return
-      if (clauses.some((clause) => !satisfiedClause(clause))) return
-      recordWorld()
-      return
-    }
-    const card = cardsToAssign[index]
-    const options = allowedFor(card).sort((a, b) => {
-      if (a === 'envelope') return -1
-      if (b === 'envelope') return 1
-      return (remaining[b] ?? 0) - (remaining[a] ?? 0)
+  function possibleClauses(index: number, mask: number) {
+    return clauses.every((clause, clauseIndex) => {
+      if (mask & (1 << clauseIndex)) return true
+      return cardsToAssign.slice(index).some((card) => clauseCardSets[clauseIndex].has(card.id) && allowedFor(card).includes(clause.playerId))
     })
-    for (const loc of options) {
-      if (!isAllowed(card, loc)) continue
-      assignment[card.id] = loc
-      if (loc === 'envelope') envelopeRemaining[card.type] -= 1
-      else remaining[loc] -= 1
-      recurse(index + 1)
-      if (loc === 'envelope') envelopeRemaining[card.type] += 1
-      else remaining[loc] += 1
-      delete assignment[card.id]
-      if (capped) return
-    }
   }
 
-  recurse(0)
+  const memo = new Map<string, CountResult>()
+  const zeroResult = (): CountResult => ({ worlds: 0n, counts: Array<bigint>(valueCount).fill(0n) })
 
-  if (worlds === 0) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
-  for (const card of game.cards) for (const loc of locations) probabilities[card.id][loc] /= worlds
+  function count(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>, mask: number): CountResult {
+    if (!canFinishCounts(index, playerRemaining, envelopeByType)) return zeroResult()
+    if (!possibleClauses(index, mask)) return zeroResult()
+    if (index === cardsToAssign.length) {
+      if (playerRemaining.some((n) => n !== 0)) return zeroResult()
+      if (Object.values(envelopeByType).some((n) => n !== 0)) return zeroResult()
+      if (clauses.some((_, clauseIndex) => !(mask & (1 << clauseIndex)))) return zeroResult()
+      return { worlds: 1n, counts: Array<bigint>(valueCount).fill(0n) }
+    }
+
+    const key = `${index}|${playerRemaining.join(',')}|${envelopeByType.suspect},${envelopeByType.weapon},${envelopeByType.room}|${mask}`
+    const cached = memo.get(key)
+    if (cached) return cached
+
+    const card = cardsToAssign[index]
+    const total = zeroResult()
+    for (const loc of allowedFor(card)) {
+      if (loc === 'envelope' && envelopeByType[card.type] <= 0) continue
+      if (loc !== 'envelope' && playerRemaining[playerIndex[loc]] <= 0) continue
+
+      const nextPlayers = [...playerRemaining]
+      const nextEnvelope = { ...envelopeByType }
+      if (loc === 'envelope') nextEnvelope[card.type] -= 1
+      else nextPlayers[playerIndex[loc]] -= 1
+
+      let nextMask = mask
+      for (const [clauseIndex, clause] of clauses.entries()) {
+        if (loc === clause.playerId && clauseCardSets[clauseIndex].has(card.id)) nextMask |= 1 << clauseIndex
+      }
+
+      const child = count(index + 1, nextPlayers, nextEnvelope, nextMask)
+      if (child.worlds === 0n) continue
+      total.worlds += child.worlds
+      total.counts[game.cards.indexOf(card) * locations.length + locationIndex[loc]] += child.worlds
+      for (let i = 0; i < valueCount; i++) total.counts[i] += child.counts[i]
+    }
+
+    memo.set(key, total)
+    return total
+  }
+
+  const result = count(0, remaining, envelopeRemaining, initialClauseMask)
+
+  if (result.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
+
+  for (const card of game.cards) {
+    const forced = forcedLocation(hardMarks[card.id])
+    for (const loc of locations) {
+      if (forced) probabilities[card.id][loc] = forced === loc ? 1 : 0
+      else probabilities[card.id][loc] = Number(result.counts[game.cards.indexOf(card) * locations.length + locationIndex[loc]]) / Number(result.worlds)
+    }
+  }
 
   const deductions: SolverResult['deductions'] = []
   for (const card of game.cards) {
@@ -188,17 +200,17 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     }
   }
 
-  if (capped) messages.push(`Enumeration stopped at ${maxWorlds.toLocaleString()} valid deals; percentages are based on the first valid deals found. Add evidence for exact results.`)
-  else messages.push(`Exact calculation across ${worlds.toLocaleString()} valid deals.`)
+  messages.push(`Exact calculation across ${Number(result.worlds).toLocaleString()} valid deals.`)
 
   const envelopePick = Object.fromEntries((['suspect', 'weapon', 'room'] as CardType[]).map((type) => {
     const cards = game.cards.filter((c) => c.type === type).map((c) => ({ cardId: c.id, probability: probabilities[c.id].envelope })).sort((a, b) => b.probability - a.probability)
     return [type, cards[0] ?? null]
   })) as SolverResult['envelopePick']
-  const comboKey = envelopePick.suspect && envelopePick.weapon && envelopePick.room ? `${envelopePick.suspect.cardId}|${envelopePick.weapon.cardId}|${envelopePick.room.cardId}` : ''
-  const accusationProbability = comboKey ? (envelopeCombos[comboKey] ?? 0) / worlds : 0
+  const accusationProbability = envelopePick.suspect && envelopePick.weapon && envelopePick.room
+    ? (probabilities[envelopePick.suspect.cardId].envelope * probabilities[envelopePick.weapon.cardId].envelope * probabilities[envelopePick.room.cardId].envelope)
+    : 0
 
-  return { status: capped ? 'capped' : 'exact', worlds, cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
+  return { status: 'exact', worlds: Number(result.worlds), cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
 }
 
 function contradiction(game: GameState, maxWorlds: number, message: string): SolverResult {
