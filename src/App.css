@@ -241,3 +241,32 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
   .card-modal { max-height: calc(100vh - 20px); padding: 16px; }
   .modal-head, .card-detail-grid { grid-template-columns: 1fr; flex-direction: column; }
 }
+
+.setup-workspace { padding: 18px; }
+.setup-editor { padding: 22px; max-width: 1180px; margin: 0 auto; }
+.setup-hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 18px; }
+.setup-total { min-width: 170px; padding: 14px; border-radius: 18px; background: rgba(125, 190, 152, .11); border: 1px solid rgba(125, 190, 152, .18); text-align: right; }
+.setup-total span { display: block; color: #bda98b; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
+.setup-total strong { display: block; color: #b9f0cf; font-size: 28px; }
+.setup-section { padding: 16px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); border-radius: 22px; margin-bottom: 16px; }
+.section-head, .card-type-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.section-head > div { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.card-type-head h3 { margin: 0; color: #f2d49b; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+.setup-player-list, .card-edit-list { display: grid; gap: 8px; }
+.setup-player-row { display: grid; grid-template-columns: 92px minmax(180px, 1fr) 120px 92px; gap: 8px; align-items: end; }
+.card-type-editor { padding: 12px; border-radius: 18px; background: rgba(0,0,0,.12); margin-bottom: 12px; }
+.card-edit-row { display: grid; grid-template-columns: 1fr 92px; gap: 8px; }
+.setup-footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border-radius: 18px; background: rgba(23, 14, 9, .96); border: 1px solid rgba(246, 219, 176, .14); }
+.setup-errors { display: flex; flex-wrap: wrap; gap: 8px; color: #ffb6ad; font-size: 13px; }
+.setup-errors span { padding: 7px 9px; border-radius: 999px; background: rgba(222, 91, 78, .14); }
+.setup-errors .ok { color: #b9f0cf; background: rgba(112, 183, 142, .18); }
+.start-button { min-width: 140px; }
+.summary-list { display: grid; gap: 7px; margin: 12px 0; }
+.summary-list div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,.16); color: #ead7b9; }
+.summary-list strong { color: #e8be78; }
+@media (max-width: 820px) {
+  .setup-hero, .section-head, .card-type-head, .setup-footer { flex-direction: column; align-items: stretch; }
+  .setup-player-row { grid-template-columns: 1fr; }
+  .card-edit-row { grid-template-columns: 1fr; }
+  .setup-total { text-align: left; }
+}

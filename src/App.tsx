@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import './App.css'
-import { createBlankMarks, createDefaultGame, type BehaviorStats, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
+import { createBlankMarks, createDefaultGame, defaultCards, defaultPlayers, type BehaviorStats, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
 import { solveGame, type SolverResult } from './solver'
 
 const saveKey = 'deduction-deck-game-v1'
@@ -93,6 +93,70 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10)
 }
 
+function slugify(value: string, fallback: string) {
+  const slug = value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return slug || fallback
+}
+
+function uniqueId(base: string, used: Set<string>) {
+  let id = base
+  let i = 2
+  while (used.has(id)) id = `${base}-${i++}`
+  used.add(id)
+  return id
+}
+
+function renumberPlayers(players: Player[]) {
+  return players.map((p, i) => ({ ...p, turnOrder: i + 1 }))
+}
+
+function distributeCardCounts(players: Player[], cardTotal: number) {
+  const dealCount = Math.max(0, cardTotal - 3)
+  const count = Math.max(1, players.length)
+  return players.map((p, i) => ({ ...p, cardCount: Math.floor(dealCount / count) + (i < dealCount % count ? 1 : 0) }))
+}
+
+function normalizeSetupGame(draft: GameState): GameState {
+  const usedPlayers = new Set<string>()
+  const players = renumberPlayers(draft.players.map((player, index) => ({
+    ...player,
+    id: uniqueId(player.id || slugify(player.name, `player-${index + 1}`), usedPlayers),
+    name: player.name.trim() || `Player ${index + 1}`,
+    cardCount: Math.max(0, Number(player.cardCount) || 0),
+  })))
+
+  const usedCards = new Set<string>()
+  const cards = draft.cards.map((card, index) => ({
+    ...card,
+    id: uniqueId(card.id || slugify(card.name, `${card.type}-${index + 1}`), usedCards),
+    name: card.name.trim() || `${typeLabel[card.type].slice(0, -1)} ${index + 1}`,
+  }))
+
+  return {
+    cards,
+    players,
+    marks: createBlankMarks(cards, players),
+    suggestions: [],
+    behaviorOptIn: draft.behaviorOptIn,
+    activeSuggesterId: players[0]?.id ?? 'player-1',
+  }
+}
+
+function setupErrors(game: GameState) {
+  const errors: string[] = []
+  if (game.players.length < 1) errors.push('Add at least one player.')
+  if (game.cards.length < 3) errors.push('Add at least three cards.')
+  for (const type of ['suspect', 'weapon', 'room'] as CardType[]) {
+    if (!game.cards.some((card) => card.type === type)) errors.push(`Add at least one ${type}.`)
+  }
+  const dealtCards = Math.max(0, game.cards.length - 3)
+  const totalPlayerCards = game.players.reduce((sum, player) => sum + (Number(player.cardCount) || 0), 0)
+  if (totalPlayerCards !== dealtCards) errors.push(`Player card counts must total ${dealtCards}; currently ${totalPlayerCards}.`)
+  if (game.players.some((player) => !player.name.trim())) errors.push('Every player needs a name.')
+  if (game.cards.some((card) => !card.name.trim())) errors.push('Every card needs a name.')
+  return errors
+}
+
 function nextPlayerId(game: GameState, currentId = game.activeSuggesterId) {
   const players = orderedPlayers(game.players)
   const idx = Math.max(0, players.findIndex((p) => p.id === currentId))
@@ -128,7 +192,9 @@ function App() {
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
-  const solver = useMemo(() => solveGame(game), [game])
+  const [setupMode, setSetupMode] = useState(false)
+  const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
+  const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
 
   function activateUser(email: string) {
@@ -140,6 +206,8 @@ function App() {
     setSelected(null)
     setMatrixMode('probabilities')
     setDetailCardId(null)
+    setSetupMode(false)
+    setSetupDraft(createDefaultGame())
   }
 
   function logout() {
@@ -147,6 +215,7 @@ function App() {
     setUserEmail(null)
     setSelected(null)
     setDetailCardId(null)
+    setSetupMode(false)
   }
 
   function updateGame(next: GameState) {
@@ -166,6 +235,7 @@ function App() {
   }
 
   function applyDeductions() {
+    if (!solver) return
     const next = structuredClone(game)
     for (const d of solver.deductions) next.marks[d.cardId][d.locationId] = d.mark
     updateGame(next)
@@ -211,13 +281,15 @@ function App() {
   const detailCard = detailCardId ? cardById(game.cards, detailCardId) : null
 
   if (!userEmail) return <AuthScreen onAuthenticated={activateUser} />
+  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { updateGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setDetailCardId(null); setMatrixMode('probabilities') }} onLogout={logout} />
+  if (!solver) return null
 
   return (
     <div className="app-shell">
-      <TopBar game={game} userEmail={userEmail} onLogout={logout} onNew={() => updateGame(resetKnownEvidence(game))} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
+      <TopBar game={game} userEmail={userEmail} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
       <main className="workspace">
         <aside className="sidebar panel">
-          <GameSetup game={game} onChange={updateGame} />
+          <GameSummary game={game} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
           <SuggestionForm key={game.activeSuggesterId} game={game} onAdd={addSuggestion} onSkip={skipSuggester} />
           <EvidenceLog game={game} />
         </aside>
@@ -309,38 +381,118 @@ function TopBar({ game, userEmail, onLogout, onNew, onSave }: { game: GameState;
   </header>
 }
 
-function GameSetup({ game, onChange }: { game: GameState; onChange: (g: GameState) => void }) {
-  const players = orderedPlayers(game.players)
+function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: GameState; onChange: (g: GameState) => void; onCancel: () => void; onStart: (g: GameState) => void; onLogout: () => void }) {
+  const errors = setupErrors(draft)
+  const dealtCards = Math.max(0, draft.cards.length - 3)
+
+  function setDraft(next: GameState) {
+    onChange({ ...next, players: renumberPlayers(next.players) })
+  }
   function updatePlayer(id: string, patch: Partial<Player>) {
-    const next = structuredClone(game)
+    const next = structuredClone(draft)
     next.players = next.players.map((p) => p.id === id ? { ...p, ...patch } : p)
-    onChange(next)
+    setDraft(next)
+  }
+  function addPlayer() {
+    const next = structuredClone(draft)
+    const used = new Set(next.players.map((p) => p.id))
+    const id = uniqueId(`player-${next.players.length + 1}`, used)
+    next.players.push({ id, name: `Player ${next.players.length + 1}`, cardCount: 0, turnOrder: next.players.length + 1 })
+    setDraft({ ...next, players: distributeCardCounts(next.players, next.cards.length) })
+  }
+  function removePlayer(id: string) {
+    const next = structuredClone(draft)
+    next.players = distributeCardCounts(next.players.filter((p) => p.id !== id), next.cards.length)
+    setDraft(next)
   }
   function movePlayer(id: string, direction: -1 | 1) {
-    const list = orderedPlayers(game.players)
+    const list = orderedPlayers(draft.players)
     const idx = list.findIndex((p) => p.id === id)
     const swap = idx + direction
     if (idx < 0 || swap < 0 || swap >= list.length) return
     ;[list[idx], list[swap]] = [list[swap], list[idx]]
-    const next = structuredClone(game)
-    next.players = list.map((p, i) => ({ ...p, turnOrder: i + 1 }))
-    onChange(next)
+    setDraft({ ...draft, players: renumberPlayers(list) })
   }
+  function updateCard(id: string, patch: Partial<Card>) {
+    const next = structuredClone(draft)
+    next.cards = next.cards.map((card) => card.id === id ? { ...card, ...patch } : card)
+    setDraft(next)
+  }
+  function addCard(type: CardType) {
+    const next = structuredClone(draft)
+    const used = new Set(next.cards.map((card) => card.id))
+    const id = uniqueId(`${type}-${next.cards.filter((card) => card.type === type).length + 1}`, used)
+    next.cards.push({ id, name: `${typeLabel[type].slice(0, -1)} ${next.cards.length + 1}`, type })
+    setDraft({ ...next, players: distributeCardCounts(next.players, next.cards.length) })
+  }
+  function removeCard(id: string) {
+    const next = structuredClone(draft)
+    next.cards = next.cards.filter((card) => card.id !== id)
+    next.players = distributeCardCounts(next.players, next.cards.length)
+    setDraft(next)
+  }
+  function resetCards() {
+    setDraft({ ...draft, cards: structuredClone(defaultCards), players: distributeCardCounts(draft.players, defaultCards.length) })
+  }
+  function resetPlayers() {
+    setDraft({ ...draft, players: distributeCardCounts(structuredClone(defaultPlayers), draft.cards.length) })
+  }
+
+  return <div className="app-shell setup-shell">
+    <header className="topbar">
+      <div className="brand"><span className="brand-mark">DD</span><div><strong>New game setup</strong><small>No solver runs until you start</small></div></div>
+      <nav><button onClick={onCancel}>Cancel</button><button onClick={onLogout}>Log out</button></nav>
+    </header>
+    <main className="setup-workspace">
+      <section className="panel setup-editor">
+        <div className="setup-hero">
+          <div>
+            <h1>Build the deck and deal</h1>
+            <p>Set players, turn order, card counts, and custom card names before calculations begin.</p>
+          </div>
+          <div className="setup-total"><span>Cards to players</span><strong>{draft.players.reduce((sum, p) => sum + Number(p.cardCount || 0), 0)} / {dealtCards}</strong></div>
+        </div>
+
+        <section className="setup-section">
+          <div className="section-head"><h2>Players and turn order</h2><div><button onClick={resetPlayers}>Default players</button><button onClick={() => onChange({ ...draft, players: distributeCardCounts(draft.players, draft.cards.length) })}>Auto deal</button><button className="primary" onClick={addPlayer}>Add player</button></div></div>
+          <div className="setup-player-list">
+            {orderedPlayers(draft.players).map((p, index) => <div className="setup-player-row" key={p.id}>
+              <div className="reorder-buttons"><button aria-label={`Move ${p.name} earlier`} disabled={index === 0} onClick={() => movePlayer(p.id, -1)}>Up</button><button aria-label={`Move ${p.name} later`} disabled={index === draft.players.length - 1} onClick={() => movePlayer(p.id, 1)}>Down</button></div>
+              <label className="field"><span>Name</span><input value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} /></label>
+              <label className="field"><span>Cards</span><input type="number" min="0" max={draft.cards.length} value={p.cardCount} onChange={(e) => updatePlayer(p.id, { cardCount: Number(e.target.value) })} /></label>
+              <button onClick={() => removePlayer(p.id)} disabled={draft.players.length <= 1}>Remove</button>
+            </div>)}
+          </div>
+        </section>
+
+        <section className="setup-section">
+          <div className="section-head"><h2>Cards</h2><div><button onClick={resetCards}>Default cards</button></div></div>
+          {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <div className="card-type-editor" key={type}>
+            <div className="card-type-head"><h3>{typeLabel[type]}</h3><button onClick={() => addCard(type)}>Add {type}</button></div>
+            <div className="card-edit-list">
+              {draft.cards.filter((card) => card.type === type).map((card) => <div className="card-edit-row" key={card.id}>
+                <input value={card.name} onChange={(e) => updateCard(card.id, { name: e.target.value })} />
+                <button onClick={() => removeCard(card.id)} disabled={draft.cards.filter((c) => c.type === type).length <= 1}>Remove</button>
+              </div>)}
+            </div>
+          </div>)}
+        </section>
+
+        <div className="setup-footer">
+          <div className="setup-errors">{errors.length ? errors.map((error) => <span key={error}>{error}</span>) : <span className="ok">Ready to start.</span>}</div>
+          <button className="primary start-button" disabled={errors.length > 0} onClick={() => onStart(draft)}>Start game</button>
+        </div>
+      </section>
+    </main>
+  </div>
+}
+
+function GameSummary({ game, onEditSetup }: { game: GameState; onEditSetup: () => void }) {
   return <section className="setup-card">
     <h2>Game setup</h2>
-    <div className="turn-order-label">Turn Order</div>
-    <div className="player-list">
-      {players.map((p, index) => {
-        const counts = countsFor(game, p.id)
-        const active = p.id === game.activeSuggesterId
-        return <div className={`player-row ${active ? 'active-turn' : ''}`} key={p.id}>
-          <div className="reorder-buttons"><button aria-label={`Move ${p.name} earlier`} disabled={index === 0} onClick={() => movePlayer(p.id, -1)}>↑</button><button aria-label={`Move ${p.name} later`} disabled={index === players.length - 1} onClick={() => movePlayer(p.id, 1)}>↓</button></div>
-          <input value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
-          <label>Cards <input type="number" min="0" max="18" value={p.cardCount} onChange={(e) => updatePlayer(p.id, { cardCount: Number(e.target.value) })} /></label>
-          <small>{active ? 'Current turn → ' : ''}{counts.known} known / {counts.unknownInHand} unknown</small>
-        </div>
-      })}
-    </div>
+    <p className="muted">{game.players.length} players - {game.cards.length} cards - {Math.max(0, game.cards.length - 3)} dealt cards</p>
+    <div className="summary-list">{orderedPlayers(game.players).map((player) => <div key={player.id}><span>{player.turnOrder}. {player.name}</span><strong>{player.cardCount}</strong></div>)}</div>
+    <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
   </section>
 }
 
@@ -354,9 +506,14 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
   const [shownCardId, setShownCard] = useState(suspect)
   const suggester = playerById(game.players, game.activeSuggesterId) ?? game.players[0]
   const responderOptions = orderedPlayers(game.players).filter((p) => p.id !== suggester.id).map((p) => [p.id, p.name])
+  const canDisprove = responderOptions.length > 0
+  const resultOptions = canDisprove
+    ? [['unknown','Disproved, unknown card'], ['shown','Showed exact card'], ['nobody','Nobody disproved'], ['unresolved','Only log guess']]
+    : [['nobody','Nobody disproved'], ['unresolved','Only log guess']]
 
   function submit() {
-    const result: SuggestionResult = resultKind === 'nobody' ? { kind: 'nobody' } : resultKind === 'shown' ? { kind: 'shown', disproverId, shownCardId } : resultKind === 'unknown' ? { kind: 'unknown', disproverId } : { kind: 'unresolved' }
+    const safeResultKind = canDisprove ? resultKind : resultKind === 'nobody' ? 'nobody' : 'unresolved'
+    const result: SuggestionResult = safeResultKind === 'nobody' ? { kind: 'nobody' } : safeResultKind === 'shown' ? { kind: 'shown', disproverId, shownCardId } : safeResultKind === 'unknown' ? { kind: 'unknown', disproverId } : { kind: 'unresolved' }
     onAdd({ id: makeId(), suggesterId: suggester.id, cardIds: [suspect, weapon, room], result, createdAt: Date.now() })
   }
   return <section className="suggestion-card">
@@ -366,9 +523,9 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
       <CardSelect label="Suspect" type="suspect" game={game} value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
       <CardSelect label="Weapon" type="weapon" game={game} value={weapon} onChange={setWeapon} />
       <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
-      <Select label="Result" value={resultKind} onChange={(v) => setResultKind(v as typeof resultKind)} options={[['unknown','Disproved, unknown card'], ['shown','Showed exact card'], ['nobody','Nobody disproved'], ['unresolved','Only log guess']]} />
-      {resultKind !== 'nobody' && resultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {resultKind === 'shown' && <Select label="Shown card" value={shownCardId} onChange={setShownCard} options={[[suspect, cardById(game.cards, suspect)!.name], [weapon, cardById(game.cards, weapon)!.name], [room, cardById(game.cards, room)!.name]]} />}
+      <Select label="Result" value={canDisprove ? resultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
+      {canDisprove && resultKind !== 'nobody' && resultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
+      {canDisprove && resultKind === 'shown' && <Select label="Shown card" value={shownCardId} onChange={setShownCard} options={[[suspect, cardById(game.cards, suspect)!.name], [weapon, cardById(game.cards, weapon)!.name], [room, cardById(game.cards, room)!.name]]} />}
     </div>
     <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
     <button className="primary wide" onClick={submit}>Record evidence and advance turn</button>
@@ -554,12 +711,13 @@ function BehaviorPanel({ game, stats, onFinish }: { game: GameState; stats: Beha
   return <section className="behavior-card">
     <h2>Behavior hints</h2>
     <p className="muted">Finished games can teach how often each player suggests cards they hold. This stays separate from exact solver odds because skill and game phase matter.</p>
-    <div className="top-hints">{top.length ? top.map(([key, s]) => <span key={key}>{key.split(':').map((id, i) => i ? cardById(game.cards,id)?.name : playerById(game.players,id)?.name).join(' / ')} → {pct(s.held / Math.max(1, s.suggested))}</span>) : <span>No completed games yet.</span>}</div>
+    <div className="top-hints">{top.length ? top.map(([key, s]) => <span key={key}>{key.split(':').map((id, i) => i ? cardById(game.cards,id)?.name : playerById(game.players,id)?.name).join(' / ')} to {pct(s.held / Math.max(1, s.suggested))}</span>) : <span>No completed games yet.</span>}</div>
     <button onClick={() => setOpen(!open)}>Finish game / learn</button>
     {open && <div className="finish-box"><Select label="Game phase tag" value={phase} onChange={setPhase} options={phaseOptions.map((p) => [p, p])} /><p className="muted">MVP: records suggested-card ownership from known marked hands. A hosted version should save full final hands in a database and model phase, player, and suggestion result.</p><button className="primary wide" onClick={finishDemo}>Store behavior sample</button></div>}
   </section>
 }
 
 export default App
+
 
 
