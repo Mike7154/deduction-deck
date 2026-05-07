@@ -101,6 +101,32 @@ function renumberPlayers(players: Player[]) {
   return players.map((p, i) => ({ ...p, turnOrder: i + 1 }))
 }
 
+function mePlayer(players: Player[]) {
+  return players.find((p) => p.isMe) ?? players[0]
+}
+
+function rotatePlayersToFirst(players: Player[], firstId: string) {
+  const list = orderedPlayers(players)
+  const index = list.findIndex((p) => p.id === firstId)
+  if (index <= 0) return renumberPlayers(list)
+  return renumberPlayers([...list.slice(index), ...list.slice(0, index)])
+}
+
+function suggestedCards(game: GameState, ids: [string, string, string]) {
+  return ids.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
+}
+
+function respondersAfter(game: GameState, suggesterId: string) {
+  const players = orderedPlayers(game.players)
+  const start = players.findIndex((p) => p.id === suggesterId)
+  if (start < 0) return players.filter((p) => p.id !== suggesterId)
+  return Array.from({ length: Math.max(0, players.length - 1) }, (_, i) => players[(start + i + 1) % players.length])
+}
+
+function setSingleMe(players: Player[], id: string) {
+  return players.map((player) => ({ ...player, isMe: player.id === id }))
+}
+
 function distributeCardCounts(players: Player[], cardTotal: number) {
   const dealCount = Math.max(0, cardTotal - 3)
   const count = Math.max(1, players.length)
@@ -109,12 +135,15 @@ function distributeCardCounts(players: Player[], cardTotal: number) {
 
 function normalizeSetupGame(draft: GameState): GameState {
   const usedPlayers = new Set<string>()
-  const players = renumberPlayers(draft.players.map((player, index) => ({
+  const firstMeId = mePlayer(draft.players)?.id
+  const normalizedPlayers = draft.players.map((player, index) => ({
     ...player,
     id: uniqueId(player.id || slugify(player.name, `player-${index + 1}`), usedPlayers),
     name: player.name.trim() || `Player ${index + 1}`,
     cardCount: Math.max(0, Number(player.cardCount) || 0),
-  })))
+    isMe: firstMeId ? player.id === firstMeId : index === 0,
+  }))
+  const players = renumberPlayers(normalizedPlayers)
 
   const usedCards = new Set<string>()
   const cards = draft.cards.map((card, index) => ({
@@ -123,10 +152,21 @@ function normalizeSetupGame(draft: GameState): GameState {
     name: card.name.trim() || `${typeLabel[card.type].slice(0, -1)} ${index + 1}`,
   }))
 
+  const marks = createBlankMarks(cards, players)
+  const meId = mePlayer(players)?.id
+  if (meId) {
+    for (const card of cards) {
+      if (draft.marks?.[card.id]?.[meId] === 'yes') {
+        marks[card.id][meId] = 'yes'
+        for (const loc of Object.keys(marks[card.id])) if (loc !== meId) marks[card.id][loc] = 'no'
+      }
+    }
+  }
+
   return {
     cards,
     players,
-    marks: createBlankMarks(cards, players),
+    marks,
     suggestions: [],
     behaviorOptIn: draft.behaviorOptIn,
     activeSuggesterId: players[0]?.id ?? 'player-1',
@@ -506,6 +546,24 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
     ;[list[idx], list[swap]] = [list[swap], list[idx]]
     setDraft({ ...draft, players: renumberPlayers(list) })
   }
+  function setMe(id: string) {
+    setDraft({ ...draft, players: setSingleMe(draft.players, id) })
+  }
+  function setGoesFirst(id: string) {
+    setDraft({ ...draft, players: rotatePlayersToFirst(draft.players, id), activeSuggesterId: id })
+  }
+  function toggleMyCard(cardId: string) {
+    const meId = mePlayer(draft.players)?.id
+    if (!meId) return
+    const next = structuredClone(draft)
+    next.marks = next.marks ?? createBlankMarks(next.cards, next.players)
+    next.marks[cardId] ??= { envelope: 'unknown' }
+    for (const player of next.players) next.marks[cardId][player.id] ??= 'unknown'
+    const nextMarkValue: Mark = next.marks[cardId][meId] === 'yes' ? 'unknown' : 'yes'
+    next.marks[cardId][meId] = nextMarkValue
+    if (nextMarkValue === 'yes') for (const loc of Object.keys(next.marks[cardId])) if (loc !== meId) next.marks[cardId][loc] = 'no'
+    setDraft(next)
+  }
   function updateCard(id: string, patch: Partial<Card>) {
     const next = structuredClone(draft)
     next.cards = next.cards.map((card) => card.id === id ? { ...card, ...patch } : card)
@@ -553,7 +611,17 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
               <div className="reorder-buttons"><button aria-label={`Move ${p.name} earlier`} disabled={index === 0} onClick={() => movePlayer(p.id, -1)}>Up</button><button aria-label={`Move ${p.name} later`} disabled={index === draft.players.length - 1} onClick={() => movePlayer(p.id, 1)}>Down</button></div>
               <label className="field"><span>Name</span><input data-setup-name="true" value={p.name} onKeyDown={moveBetweenSetupNames} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} /></label>
               <label className="field"><span>Cards</span><input type="number" min="0" max={draft.cards.length} value={p.cardCount} onChange={(e) => updatePlayer(p.id, { cardCount: Number(e.target.value) })} /></label>
-              <button onClick={() => removePlayer(p.id)} disabled={draft.players.length <= 1}>Remove</button>
+              <div className="setup-player-flags"><button className={p.isMe ? 'primary' : ''} onClick={() => setMe(p.id)}>{p.isMe ? 'Me' : 'Set me'}</button><button onClick={() => setGoesFirst(p.id)} disabled={index === 0}>Goes first</button><button onClick={() => removePlayer(p.id)} disabled={draft.players.length <= 1}>Remove</button></div>
+            </div>)}
+          </div>
+        </section>
+
+        <section className="setup-section">
+          <div className="section-head"><h2>My hand</h2><p className="microcopy">Check the cards dealt to {mePlayer(draft.players)?.name ?? 'Me'}; they start as YES in your matrix.</p></div>
+          <div className="my-hand-grid">
+            {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <div className="my-hand-group" key={type}>
+              <h3>{typeLabel[type]}</h3>
+              {draft.cards.filter((card) => card.type === type).map((card) => <label className="hand-card-check" key={card.id}><input type="checkbox" checked={draft.marks?.[card.id]?.[mePlayer(draft.players)?.id ?? ''] === 'yes'} onChange={() => toggleMyCard(card.id)} /> <span>{card.name}</span></label>)}
             </div>)}
           </div>
         </section>
@@ -600,7 +668,7 @@ function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChang
     <p className="muted">{game.players.length} players - {game.cards.length} cards - {Math.max(0, game.cards.length - 3)} dealt cards</p>
     {!collapsed && <>
       <div className="summary-list">{orderedPlayers(game.players).map((player, index) => <div key={player.id}>
-        <label className="summary-name"><span>{player.turnOrder}.</span><input value={player.name} onChange={(event) => renamePlayer(player.id, event.target.value)} /></label>
+        <label className="summary-name"><span>{player.turnOrder}.</span><input value={player.name} onChange={(event) => renamePlayer(player.id, event.target.value)} /></label>{player.isMe && <span className="me-badge">Me</span>}
         <strong>{player.cardCount}</strong>
         <span className="mini-reorder"><button aria-label={`Move ${player.name} earlier`} disabled={index === 0} onClick={() => movePlayer(player.id, -1)}>▲</button><button aria-label={`Move ${player.name} later`} disabled={index === game.players.length - 1} onClick={() => movePlayer(player.id, 1)}>▼</button></span>
       </div>)}</div>
@@ -626,31 +694,84 @@ function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: S
   const [resultKind, setResultKind] = useState<'nobody' | 'unknown' | 'shown' | 'unresolved'>('unknown')
   const [disproverId, setDisprover] = useState(nextPlayerId(game, game.activeSuggesterId))
   const [shownCardId, setShownCard] = useState(suspect)
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [responderIndex, setResponderIndex] = useState(0)
   const suggester = playerById(game.players, game.activeSuggesterId) ?? game.players[0]
-  const responderOptions = orderedPlayers(game.players).filter((p) => p.id !== suggester.id).map((p) => [p.id, p.name])
+  const me = mePlayer(game.players)
+  const responderList = respondersAfter(game, suggester.id)
+  const responderOptions = responderList.map((p) => [p.id, p.name])
+  const currentResponder = responderList[responderIndex]
   const canDisprove = responderOptions.length > 0
+  const exactCardKnown = canDisprove && (suggester.isMe || playerById(game.players, disproverId)?.isMe)
+  const selectedCardIds: [string, string, string] = [suspect, weapon, room]
+  const selectedCards = suggestedCards(game, selectedCardIds)
+  const safeShownCardId = selectedCardIds.includes(shownCardId) ? shownCardId : suspect
+  const displayedResultKind = exactCardKnown && resultKind === 'unknown' ? 'shown' : resultKind
   const resultOptions = canDisprove
     ? [['unknown','Disproved, unknown card'], ['shown','Showed exact card'], ['nobody','Nobody disproved'], ['unresolved','Only log guess']]
     : [['nobody','Nobody disproved'], ['unresolved','Only log guess']]
 
-  function submit() {
-    const safeResultKind = canDisprove ? resultKind : resultKind === 'nobody' ? 'nobody' : 'unresolved'
-    const result: SuggestionResult = safeResultKind === 'nobody' ? { kind: 'nobody' } : safeResultKind === 'shown' ? { kind: 'shown', disproverId, shownCardId } : safeResultKind === 'unknown' ? { kind: 'unknown', disproverId } : { kind: 'unresolved' }
-    onAdd({ id: makeId(), suggesterId: suggester.id, cardIds: [suspect, weapon, room], result, createdAt: Date.now() })
+  function submit(override?: SuggestionResult) {
+    const safeResultKind = canDisprove ? displayedResultKind : resultKind === 'nobody' ? 'nobody' : 'unresolved'
+    const result: SuggestionResult = override ?? (safeResultKind === 'nobody' ? { kind: 'nobody' } : safeResultKind === 'shown' ? { kind: 'shown', disproverId, shownCardId: safeShownCardId } : safeResultKind === 'unknown' ? { kind: 'unknown', disproverId } : { kind: 'unresolved' })
+    onAdd({ id: makeId(), suggesterId: suggester.id, cardIds: selectedCardIds, result, createdAt: new Date().getTime() })
+    setQuickOpen(false)
+    setResponderIndex(0)
   }
+
+  function openQuickPlay() {
+    setResponderIndex(0)
+    setQuickOpen(true)
+  }
+
+  function markCannotDisprove() {
+    if (responderIndex >= responderList.length - 1) submit({ kind: 'nobody' })
+    else setResponderIndex((i) => i + 1)
+  }
+
+  function markCanDisprove(cardId?: string) {
+    if (!currentResponder) return
+    const result: SuggestionResult = cardId || suggester.isMe || currentResponder.isMe
+      ? { kind: 'shown', disproverId: currentResponder.id, shownCardId: cardId ?? suspect }
+      : { kind: 'unknown', disproverId: currentResponder.id }
+    submit(result)
+  }
+
   return <section className="suggestion-card">
     <div className="suggestion-title"><h2>Current suggestion</h2><button className="tiny" onClick={onSkip}>Skip suggester</button></div>
-    <div className="current-turn-box"><span>Now asking</span><strong>{suggester.name}</strong></div>
+    <div className="current-turn-box"><span>Now asking</span><strong>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''}</strong><button className="tiny popout-button" onClick={openQuickPlay}>Pop out</button></div>
     <div className="form-grid">
       <CardSelect label="Suspect" type="suspect" game={game} value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
       <CardSelect label="Weapon" type="weapon" game={game} value={weapon} onChange={setWeapon} />
       <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
-      <Select label="Result" value={canDisprove ? resultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
-      {canDisprove && resultKind !== 'nobody' && resultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {canDisprove && resultKind === 'shown' && <Select label="Shown card" value={shownCardId} onChange={setShownCard} options={[[suspect, cardById(game.cards, suspect)!.name], [weapon, cardById(game.cards, weapon)!.name], [room, cardById(game.cards, room)!.name]]} />}
+      <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
+      {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
+      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={selectedCards.map((card) => [card.id, card.name])} />}
     </div>
+    {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
     <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
-    <button className="primary wide" onClick={submit}>Record evidence and advance turn</button>
+    <button className="primary wide" onClick={() => submit()}>Record evidence and advance turn</button>
+
+    {quickOpen && <div className="modal-backdrop quick-suggestion-backdrop" role="dialog" aria-modal="true" onClick={() => setQuickOpen(false)}>
+      <section className="quick-suggestion-modal panel" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head"><div><h1>Log suggestion</h1><p>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''} is asking.</p></div><button onClick={() => setQuickOpen(false)}>Close</button></div>
+        <div className="form-grid quick-card-grid">
+          <CardSelect label="Suspect" type="suspect" game={game} value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
+          <CardSelect label="Weapon" type="weapon" game={game} value={weapon} onChange={setWeapon} />
+          <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
+        </div>
+        {currentResponder ? <div className="responder-step">
+          <span>Next player</span>
+          <strong>{currentResponder.name}{currentResponder.id === me?.id ? ' (Me)' : ''}</strong>
+          {(suggester.isMe || currentResponder.isMe) ? <div className="shown-card-buttons">
+            <p className="microcopy">If they can disprove, choose the exact card shown.</p>
+            {selectedCards.map((card) => <button className="primary" key={card.id} onClick={() => markCanDisprove(card.id)}>Showed {card.name}</button>)}
+          </div> : <button className="primary wide" onClick={() => markCanDisprove()}>Can disprove</button>}
+          <button className="wide" onClick={markCannotDisprove}>Cannot disprove</button>
+        </div> : <button className="primary wide" onClick={() => submit({ kind: 'nobody' })}>Nobody disproved</button>}
+        <button className="wide" onClick={() => { onSkip(); setQuickOpen(false) }}>Skip / advance asker</button>
+      </section>
+    </div>}
   </section>
 }
 
@@ -671,9 +792,9 @@ function TypeHeader({ type, game, solver, collapsed, onToggle, colSpan }: { type
 }
 
 function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
-  return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{loc === 'envelope' ? 'Envelope' : playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
+  return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => { const player = loc === 'envelope' ? null : playerById(game.players, loc); return <th key={loc} className={`${loc === 'envelope' ? 'envelope-col' : ''} ${player?.isMe ? 'me-col' : ''}`}>{loc === 'envelope' ? 'Envelope' : player?.name}</th> })}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
-  </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc}>3 cards</td> : <td key={loc}>{countsFor(game, loc, solver).known} known<br />{countsFor(game, loc, solver).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
+  </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc} className="envelope-col">3 cards</td> : <td key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}>{countsFor(game, loc, solver).known} known<br />{countsFor(game, loc, solver).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
 }
 
 function GroupedRows({ type, game, solver, locations, selected, collapsed, onToggle, onSelect, onSetMark, onOpenCard }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsed: boolean; onToggle: () => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
@@ -687,7 +808,7 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
           const mark = game.marks[card.id][loc]
           const prob = solver.probabilities[card.id]?.[loc] ?? 0
           const isSelected = selected?.cardId === card.id && selected?.locationId === loc
-          return <td key={loc} className={`prob-cell ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
+          return <td key={loc} className={`prob-cell ${loc === 'envelope' ? 'envelope-col' : ''} ${playerById(game.players, loc)?.isMe ? 'me-col' : ''} ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
             {mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : pct(prob)}
           </td>
         })}
@@ -697,14 +818,14 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
 }
 
 function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onOpenCard: (cardId: string) => void }) {
-  return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
+  return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}>{playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <>
       <TypeHeader key={`${type}-group`} type={type} game={game} solver={solver} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} colSpan={locations.length + 1} />
       {!collapsedTypes[type] && game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
         const count = guessCount(game, loc, card.id)
         const mark = game.marks[card.id][loc]
         const probability = solver.probabilities[card.id]?.[loc] ?? 0
-        return <td className={`guess-cell ${count > 0 ? 'has-guesses' : ''}`} key={loc}><strong>{count}</strong><small>{mark === 'yes' ? 'known held' : mark === 'no' ? 'ruled out' : pct(probability)}</small></td>
+        return <td className={`guess-cell ${playerById(game.players, loc)?.isMe ? 'me-col' : ''} ${count > 0 ? 'has-guesses' : ''}`} key={loc}><strong>{count}</strong><small>{mark === 'yes' ? 'known held' : mark === 'no' ? 'ruled out' : pct(probability)}</small></td>
       })}</tr>)}
     </>)}
   </tbody></table></div>

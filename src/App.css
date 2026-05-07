@@ -543,3 +543,82 @@ th:first-child { width: 124px; }
 .app-shell[data-theme="light"] .guess-cell { color: #745f47; background: rgba(93,65,35,.04); }
 .app-shell[data-theme="light"] .guess-cell strong,
 .app-shell[data-theme="light"] .deduction-prob strong { color: #21693f; }
+
+/* Setup helpers: Me, first player, and starting hand */
+.setup-player-row { grid-template-columns: 92px minmax(180px, 1fr) 110px minmax(220px, auto); }
+.setup-player-flags { display: grid; grid-template-columns: repeat(3, auto); gap: 6px; align-items: end; }
+.setup-player-flags button { padding: 8px 9px; white-space: nowrap; }
+.my-hand-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.my-hand-group { padding: 12px; border-radius: 16px; background: rgba(0,0,0,.14); border: 1px solid rgba(246, 219, 176, .08); }
+.my-hand-group h3 { margin: 0 0 8px; color: #f2d49b; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.hand-card-check { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: #ead7b9; font-size: 13px; }
+.hand-card-check input { width: auto; accent-color: #e8be78; }
+.me-badge { display: inline-flex; justify-content: center; border-radius: 999px; padding: 4px 7px; color: #1b100a; background: #e8be78; font-size: 11px; font-weight: 950; }
+
+/* Matrix visual anchors */
+.matrix .envelope-col { border-left: 4px solid rgba(232, 190, 120, .85); border-right: 1px solid rgba(232, 190, 120, .36); box-shadow: inset 9px 0 0 rgba(232, 190, 120, .08); }
+th.envelope-col { background: linear-gradient(180deg, #3a2715, #281910); }
+.matrix .me-col { box-shadow: inset 0 0 0 2px rgba(142, 205, 175, .42); }
+th.me-col { color: #b9f0cf; }
+
+/* Quick suggestion pop-out */
+.popout-button { margin-left: auto; }
+.quick-suggestion-modal { width: min(620px, 100%); max-height: min(760px, calc(100vh - 32px)); overflow: auto; padding: 18px; }
+.quick-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.responder-step { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(125, 190, 152, .11); border: 1px solid rgba(125, 190, 152, .2); }
+.responder-step > span { color: #bda98b; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+.responder-step > strong { color: #f7e8cf; font-size: 24px; }
+.shown-card-buttons { display: grid; gap: 8px; }
+.exact-hint { margin-bottom: 10px; }
+
+/* Light mode contrast fixes for logs and card detail modal */
+.app-shell[data-theme="light"] .modal-backdrop { background: rgba(64, 42, 20, .28); }
+.app-shell[data-theme="light"] .card-modal,
+.app-shell[data-theme="light"] .quick-suggestion-modal { background: linear-gradient(180deg, rgba(255,255,255,.97), rgba(248,238,222,.96)); border-color: rgba(93,65,35,.18); box-shadow: 0 28px 80px rgba(89,62,35,.22); }
+.app-shell[data-theme="light"] .modal-head h1,
+.app-shell[data-theme="light"] .card-modal h1,
+.app-shell[data-theme="light"] .quick-suggestion-modal h1 { color: #2f251a; }
+.app-shell[data-theme="light"] .emphasis-block { background: linear-gradient(135deg, rgba(232,190,120,.28), rgba(125,190,152,.22)); border-color: rgba(93,65,35,.14); }
+.app-shell[data-theme="light"] .emphasis-block > strong,
+.app-shell[data-theme="light"] .prob-chip strong,
+.app-shell[data-theme="light"] .prob-list strong,
+.app-shell[data-theme="light"] .repeat-list strong { color: #17633a; }
+.app-shell[data-theme="light"] .action-main,
+.app-shell[data-theme="light"] .action-row p,
+.app-shell[data-theme="light"] .hand-card-check { color: #3a2b1d; }
+.app-shell[data-theme="light"] .action-main strong,
+.app-shell[data-theme="light"] .prob-chip.shown strong { color: #8a5616; }
+.app-shell[data-theme="light"] .action-row small,
+.app-shell[data-theme="light"] .action-row time,
+.app-shell[data-theme="light"] .log-item small { color: #6e5941; }
+.app-shell[data-theme="light"] .card-prob-strip .prob-chip { border: 1px solid rgba(93,65,35,.1); background: rgba(255,255,255,.7); }
+.app-shell[data-theme="light"] .log-item { background: rgba(255,255,255,.72); border-color: rgba(93,65,35,.14); }
+.app-shell[data-theme="light"] .suspect-pill { background: rgba(176, 55, 43, .14); color: #8d2118; }
+.app-shell[data-theme="light"] .disabled-pill { background: rgba(93,65,35,.1); color: #604b35; }
+.app-shell[data-theme="light"] .danger-hint { background: rgba(176,55,43,.1); border-color: rgba(176,55,43,.22); color: #7f2118; }
+.app-shell[data-theme="light"] .my-hand-group,
+.app-shell[data-theme="light"] .responder-step { background: rgba(93,65,35,.055); border-color: rgba(93,65,35,.12); }
+.app-shell[data-theme="light"] .my-hand-group h3,
+.app-shell[data-theme="light"] .responder-step > strong { color: #3a2b1d; }
+.app-shell[data-theme="light"] .matrix .envelope-col { border-left-color: rgba(148,97,30,.9); box-shadow: inset 9px 0 0 rgba(232,190,120,.22); }
+.app-shell[data-theme="light"] th.envelope-col { background: linear-gradient(180deg, #ead3ad, #f0dfc8); }
+.app-shell[data-theme="light"] .matrix .me-col { box-shadow: inset 0 0 0 2px rgba(33,105,63,.32); }
+.app-shell[data-theme="light"] th.me-col { color: #21693f; }
+
+@media (max-width: 820px) {
+  .setup-player-row { grid-template-columns: 1fr; }
+  .setup-player-flags { grid-template-columns: 1fr 1fr 1fr; }
+  .my-hand-grid, .quick-card-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .setup-player-row {
+    grid-template-columns: 64px minmax(0, 1fr) 76px;
+    grid-template-areas:
+      "move name cards"
+      "flags flags flags";
+  }
+  .setup-player-row .setup-player-flags { grid-area: flags; }
+  .quick-suggestion-backdrop { align-items: end; place-items: end stretch; padding: 0; }
+  .quick-suggestion-modal { width: 100%; max-height: 92vh; border-radius: 22px 22px 0 0; border-bottom: 0; padding: 14px; }
+  .responder-step > strong { font-size: 20px; }
+}
