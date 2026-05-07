@@ -276,3 +276,72 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
   .card-edit-row { grid-template-columns: 1fr; }
   .setup-total { text-align: left; }
 }
+
+/* Responsive polish for laptops and phones */
+th:first-child { width: 124px; }
+@media (min-width: 1221px) and (max-width: 1500px) {
+  .workspace { grid-template-columns: 220px minmax(0, 1fr) 230px; gap: 10px; padding: 10px; }
+  .sidebar, .inspector { padding: 10px; gap: 10px; }
+  .matrix-panel { padding: 12px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { padding: 10px; }
+  .prob-cell { font-size: 12px; }
+  .guess-cell strong { font-size: 17px; }
+  .guess-cell small { font-size: 11px; }
+}
+@media (max-width: 820px) {
+  .app-shell { background-attachment: fixed; }
+  .topbar { position: relative; padding: 10px; border-bottom-color: rgba(245, 218, 171, .1); }
+  .brand-mark { width: 36px; height: 36px; border-radius: 12px; }
+  .brand strong { font-size: 16px; }
+  .brand small { font-size: 11px; overflow-wrap: anywhere; }
+  .topbar nav { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .topbar nav button { padding: 9px 8px; }
+  .workspace { gap: 10px; padding: 8px; }
+  .sidebar { order: 1; }
+  .matrix-panel { order: 2; padding: 10px; }
+  .inspector { order: 3; padding: 8px; gap: 10px; }
+  .panel { border-radius: 20px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { border-radius: 16px; padding: 10px; }
+  h1 { font-size: 25px; }
+  h2 { font-size: 12px; margin-bottom: 9px; }
+  p, .muted { font-size: 13px; }
+  .matrix-head { gap: 10px; margin-bottom: 10px; }
+  .matrix-actions { gap: 8px; }
+  .matrix-actions button { padding: 9px 8px; }
+  .matrix-wrap { margin-inline: -4px; border-radius: 14px; -webkit-overflow-scrolling: touch; }
+  .matrix { min-width: 560px; }
+  th { top: 0; font-size: 9px; padding: 7px 3px; letter-spacing: .02em; }
+  th:first-child { width: 104px; }
+  td { padding: 6px 3px; }
+  .card-name { font-size: 12px; }
+  .card-link { max-width: 98px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .prob-cell { font-size: 12px; }
+  .guess-cell strong { font-size: 16px; }
+  .guess-cell small { font-size: 10px; }
+  tfoot td { font-size: 10px; }
+  .group-row td { font-size: 11px; }
+  .group-toggle { padding: 6px; }
+  .current-turn-box { padding: 10px; }
+  .current-turn-box strong { font-size: 16px; }
+  .summary-list div { grid-template-columns: 1fr auto; }
+  .mini-reorder { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+  .mini-reorder button { padding: 6px; }
+  .log-list { max-height: none; }
+  .button-row button { flex: 1; min-width: 88px; }
+  .big-prob { font-size: 44px; }
+  .setup-workspace { padding: 8px; }
+  .setup-editor { padding: 12px; border-radius: 20px; }
+  .setup-section { padding: 10px; border-radius: 16px; }
+  .section-head > div { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .setup-footer { position: static; }
+}
+@media (max-width: 420px) {
+  button { padding: 9px 10px; }
+  input, select { padding: 9px; }
+  .auth-shell { padding: 10px; }
+  .auth-card { padding: 18px; border-radius: 20px; }
+  .matrix { min-width: 530px; }
+  th:first-child { width: 96px; }
+  .prob-cell { font-size: 11px; }
+  .guess-cell small { font-size: 9px; }
+}
