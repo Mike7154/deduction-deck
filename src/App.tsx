@@ -290,7 +290,7 @@ function App() {
       <TopBar game={game} userEmail={userEmail} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
       <main className="workspace">
         <aside className="sidebar panel">
-          <GameSummary game={game} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
+          <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
           <SuggestionForm key={game.activeSuggesterId} game={game} onAdd={addSuggestion} onSkip={skipSuggester} />
           <EvidenceLog game={game} />
         </aside>
@@ -488,11 +488,25 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
   </div>
 }
 
-function GameSummary({ game, onEditSetup }: { game: GameState; onEditSetup: () => void }) {
+function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChange: (g: GameState) => void; onEditSetup: () => void }) {
+  function movePlayer(id: string, direction: -1 | 1) {
+    const list = orderedPlayers(game.players)
+    const idx = list.findIndex((p) => p.id === id)
+    const swap = idx + direction
+    if (idx < 0 || swap < 0 || swap >= list.length) return
+    ;[list[idx], list[swap]] = [list[swap], list[idx]]
+    const players = renumberPlayers(list)
+    const activeStillExists = players.some((p) => p.id === game.activeSuggesterId)
+    onChange({ ...game, players, activeSuggesterId: activeStillExists ? game.activeSuggesterId : players[0]?.id ?? game.activeSuggesterId })
+  }
   return <section className="setup-card">
     <h2>Game setup</h2>
     <p className="muted">{game.players.length} players - {game.cards.length} cards - {Math.max(0, game.cards.length - 3)} dealt cards</p>
-    <div className="summary-list">{orderedPlayers(game.players).map((player) => <div key={player.id}><span>{player.turnOrder}. {player.name}</span><strong>{player.cardCount}</strong></div>)}</div>
+    <div className="summary-list">{orderedPlayers(game.players).map((player, index) => <div key={player.id}>
+      <span>{player.turnOrder}. {player.name}</span>
+      <strong>{player.cardCount}</strong>
+      <span className="mini-reorder"><button aria-label={`Move ${player.name} earlier`} disabled={index === 0} onClick={() => movePlayer(player.id, -1)}>▲</button><button aria-label={`Move ${player.name} later`} disabled={index === game.players.length - 1} onClick={() => movePlayer(player.id, 1)}>▼</button></span>
+    </div>)}</div>
     <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
   </section>
 }
@@ -546,7 +560,7 @@ function envelopeLabel(game: GameState, solver: SolverResult, type: CardType) {
 }
 
 function TypeHeader({ type, game, solver, collapsed, onToggle, colSpan }: { type: CardType; game: GameState; solver: SolverResult; collapsed: boolean; onToggle: () => void; colSpan: number }) {
-  return <tr className="group-row"><td colSpan={colSpan}><button className="group-toggle" onClick={onToggle}>{collapsed ? 'Show' : 'Hide'} {typeLabel[type]}{envelopeLabel(game, solver, type)}</button></td></tr>
+  return <tr className="group-row"><td colSpan={colSpan}><button className="group-toggle" aria-label={`${collapsed ? 'Show' : 'Hide'} ${typeLabel[type]}`} onClick={onToggle}><span className="chevron">{collapsed ? '▶' : '▼'}</span>{typeLabel[type]}{envelopeLabel(game, solver, type)}</button></td></tr>
 }
 
 function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {

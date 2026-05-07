@@ -140,7 +140,8 @@ td { padding: 7px 5px; border-bottom: 1px solid rgba(246, 219, 176, .08); color:
   .matrix-wrap { overflow-x: auto; }
   .matrix { min-width: 760px; }
 }
-.group-toggle { width: 100%; padding: 6px 8px; background: transparent; border: 0; color: inherit; text-align: left; font: inherit; font-weight: 900; letter-spacing: inherit; text-transform: inherit; }
+.group-toggle { width: 100%; padding: 6px 8px; background: transparent; border: 0; color: inherit; text-align: left; font: inherit; font-weight: 900; letter-spacing: inherit; text-transform: inherit; display: inline-flex; align-items: center; gap: 8px; }
+.chevron { width: 16px; display: inline-block; color: #e8be78; }
 .group-toggle:hover { transform: none; background: rgba(255,255,255,.06); }
 
 .matrix-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
@@ -164,8 +165,8 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
 .deduction-prob span { color: #bda98b; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
 .deduction-prob strong { color: #b9f0cf; font-size: 26px; letter-spacing: -.04em; }
 .guess-cell { text-align: center; color: #a99475; background: rgba(255,255,255,.025); }
-.guess-cell strong { display: block; color: #f4e5cb; font-size: 17px; }
-.guess-cell small { display: block; color: #8e7b63; font-size: 11px; margin-top: 2px; }
+.guess-cell strong { display: block; color: #f4e5cb; font-size: 18px; }
+.guess-cell small { display: block; color: #8e7b63; font-size: 12px; margin-top: 2px; }
 .guess-cell.has-guesses { background: linear-gradient(135deg, rgba(232, 190, 120, .18), rgba(125, 190, 152, .08)); }
 .guess-cell.has-guesses strong { color: #e8be78; }
 @media (max-width: 820px) {
@@ -265,7 +266,9 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
 .setup-errors .ok { color: #b9f0cf; background: rgba(112, 183, 142, .18); }
 .start-button { min-width: 140px; }
 .summary-list { display: grid; gap: 7px; margin: 12px 0; }
-.summary-list div { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,.16); color: #ead7b9; }
+.summary-list div { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(0,0,0,.16); color: #ead7b9; }
+.mini-reorder { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.mini-reorder button { padding: 3px 5px; border-radius: 7px; font-size: 10px; line-height: 1; }
 .summary-list strong { color: #e8be78; }
 @media (max-width: 820px) {
   .setup-hero, .section-head, .card-type-head, .setup-footer { flex-direction: column; align-items: stretch; }
