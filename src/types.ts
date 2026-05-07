@@ -61,7 +61,7 @@ export const defaultCards: Card[] = [
 ]
 
 export const defaultPlayers: Player[] = [
-  { id: 'p1', name: 'P1', cardCount: 3, turnOrder: 1, isMe: true },
+  { id: 'p1', name: 'Me', cardCount: 3, turnOrder: 1, isMe: true },
   { id: 'p2', name: 'P2', cardCount: 3, turnOrder: 2 },
   { id: 'p3', name: 'P3', cardCount: 3, turnOrder: 3 },
   { id: 'p4', name: 'P4', cardCount: 3, turnOrder: 4 },
@@ -94,3 +94,4 @@ export const typeLabel: Record<CardType, string> = {
   weapon: 'Weapons',
   room: 'Rooms',
 }
+
