@@ -397,3 +397,14 @@ th:first-child { width: 124px; }
   .card-type-head h3 { font-size: 12px; letter-spacing: .06em; }
   .card-type-head button, .card-edit-row button { font-size: 11px; }
 }
+
+.summary-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.summary-head h2 { margin-bottom: 0; }
+.summary-name { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; }
+.summary-name span { color: #bda98b; font-size: 12px; font-weight: 800; }
+.summary-name input { padding: 6px 7px; border-radius: 9px; font-size: 13px; }
+@media (max-width: 640px) {
+  .summary-head .tiny { padding: 6px 9px; }
+  .setup-card > .muted { margin-bottom: 0; }
+  .summary-list { margin-top: 10px; }
+}

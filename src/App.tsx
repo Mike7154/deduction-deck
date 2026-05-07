@@ -474,6 +474,7 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
 }
 
 function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChange: (g: GameState) => void; onEditSetup: () => void }) {
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches)
   function movePlayer(id: string, direction: -1 | 1) {
     const list = orderedPlayers(game.players)
     const idx = list.findIndex((p) => p.id === id)
@@ -484,15 +485,20 @@ function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChang
     const activeStillExists = players.some((p) => p.id === game.activeSuggesterId)
     onChange({ ...game, players, activeSuggesterId: activeStillExists ? game.activeSuggesterId : players[0]?.id ?? game.activeSuggesterId })
   }
+  function renamePlayer(id: string, name: string) {
+    onChange({ ...game, players: game.players.map((player) => player.id === id ? { ...player, name } : player) })
+  }
   return <section className="setup-card">
-    <h2>Game setup</h2>
+    <div className="summary-head"><h2>Game setup</h2><button className="tiny" onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Show' : 'Hide'}</button></div>
     <p className="muted">{game.players.length} players - {game.cards.length} cards - {Math.max(0, game.cards.length - 3)} dealt cards</p>
-    <div className="summary-list">{orderedPlayers(game.players).map((player, index) => <div key={player.id}>
-      <span>{player.turnOrder}. {player.name}</span>
-      <strong>{player.cardCount}</strong>
-      <span className="mini-reorder"><button aria-label={`Move ${player.name} earlier`} disabled={index === 0} onClick={() => movePlayer(player.id, -1)}>▲</button><button aria-label={`Move ${player.name} later`} disabled={index === game.players.length - 1} onClick={() => movePlayer(player.id, 1)}>▼</button></span>
-    </div>)}</div>
-    <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
+    {!collapsed && <>
+      <div className="summary-list">{orderedPlayers(game.players).map((player, index) => <div key={player.id}>
+        <label className="summary-name"><span>{player.turnOrder}.</span><input value={player.name} onChange={(event) => renamePlayer(player.id, event.target.value)} /></label>
+        <strong>{player.cardCount}</strong>
+        <span className="mini-reorder"><button aria-label={`Move ${player.name} earlier`} disabled={index === 0} onClick={() => movePlayer(player.id, -1)}>▲</button><button aria-label={`Move ${player.name} later`} disabled={index === game.players.length - 1} onClick={() => movePlayer(player.id, 1)}>▼</button></span>
+      </div>)}</div>
+      <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
+    </>}
   </section>
 }
 
