@@ -185,6 +185,7 @@ function App() {
   const [setupMode, setSetupMode] = useState(false)
   const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
   const [collapsedTypes, setCollapsedTypes] = useState<Record<CardType, boolean>>({ suspect: false, weapon: false, room: false })
+  const [undoStack, setUndoStack] = useState<GameState[]>([])
   const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
   const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
 
@@ -214,8 +215,20 @@ function App() {
   function updateGame(next: GameState) {
     if (!userEmail) return
     const hydrated = hydrateGame(next)
+    setUndoStack((stack) => [game, ...stack].slice(0, 25))
     setGame(hydrated)
     localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(hydrated))
+  }
+
+  function undoLastChange() {
+    const [previous, ...rest] = undoStack
+    if (!previous || !userEmail) return
+    setUndoStack(rest)
+    setGame(previous)
+    setSelected(null)
+    setQuickMark(null)
+    setDetailCardId(null)
+    localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(previous))
   }
 
   function setMark(cardId: string, locationId: LocationId, mark: Mark) {
@@ -282,7 +295,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <TopBar game={game} userEmail={userEmail} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
+      <TopBar game={game} userEmail={userEmail} canUndo={undoStack.length > 0} onUndo={undoLastChange} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
       <main className="workspace">
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
@@ -360,7 +373,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => v
   </div>
 }
 
-function TopBar({ game, userEmail, onLogout, onNew, onSave }: { game: GameState; userEmail: string; onLogout: () => void; onNew: () => void; onSave: () => void }) {
+function TopBar({ game, userEmail, canUndo, onUndo, onLogout, onNew, onSave }: { game: GameState; userEmail: string; canUndo: boolean; onUndo: () => void; onLogout: () => void; onNew: () => void; onSave: () => void }) {
   function exportJson() {
     const blob = new Blob([JSON.stringify(game, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -370,7 +383,7 @@ function TopBar({ game, userEmail, onLogout, onNew, onSave }: { game: GameState;
   }
   return <header className="topbar">
     <div className="brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>{userEmail}</small></div></div>
-    <nav><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onLogout}>Log out</button></nav>
+    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onLogout}>Log out</button></nav>
   </header>
 }
 
