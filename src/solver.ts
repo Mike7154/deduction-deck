@@ -13,7 +13,8 @@ export type SolverResult = {
 
 type Clause = { playerId: string; cardIds: string[]; kind: 'atLeastOne' }
 type NoFact = { playerId: string; cardIds: string[] }
-type CountResult = { worlds: bigint; counts: bigint[] }
+type EnvelopeSelection = Record<CardType, number>
+type CountResult = { worlds: bigint; counts: bigint[]; envelopeCombos: bigint[] }
 
 
 function orderedPlayers(players: Player[]) {
@@ -72,10 +73,15 @@ function forcedLocation(marks: Record<LocationId, Mark>) {
 export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const players = orderedPlayers(game.players)
   const locations: LocationId[] = ['envelope', ...players.map((p) => p.id)]
+  const envelopeTypes: CardType[] = ['suspect', 'weapon', 'room']
+  const cardsByType = Object.fromEntries(envelopeTypes.map((type) => [type, game.cards.filter((card) => card.type === type)])) as Record<CardType, Card[]>
+  const typeCardIndex = Object.fromEntries(envelopeTypes.map((type) => [type, Object.fromEntries(cardsByType[type].map((card, i) => [card.id, i]))])) as Record<CardType, Record<string, number>>
+  const comboCount = cardsByType.suspect.length * cardsByType.weapon.length * cardsByType.room.length
   const playerIndex = Object.fromEntries(players.map((p, i) => [p.id, i])) as Record<string, number>
   const locationIndex = Object.fromEntries(locations.map((loc, i) => [loc, i])) as Record<LocationId, number>
   const remaining = players.map((p) => p.cardCount)
   const envelopeRemaining: Record<CardType, number> = { suspect: 1, weapon: 1, room: 1 }
+  const initialEnvelopeSelection: EnvelopeSelection = { suspect: -1, weapon: -1, room: -1 }
   const probabilities = emptyProbabilities(game.cards, locations)
   const messages: string[] = []
   const { noFacts, clauses, yesFacts } = suggestionFacts(players, game.suggestions)
@@ -90,7 +96,10 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     const f = forcedLocation(hardMarks[card.id])
     if (f === '__conflict__') return contradiction(game, maxWorlds, 'A card is marked yes in more than one location.')
     if (f) {
-      if (f === 'envelope') envelopeRemaining[card.type] -= 1
+      if (f === 'envelope') {
+        envelopeRemaining[card.type] -= 1
+        initialEnvelopeSelection[card.type] = typeCardIndex[card.type][card.id]
+      }
       else remaining[playerIndex[f]] -= 1
       if ((f === 'envelope' && envelopeRemaining[card.type] < 0) || (f !== 'envelope' && remaining[playerIndex[f]] < 0)) {
         return contradiction(game, maxWorlds, 'Known yes facts exceed an envelope or player card-count limit.')
@@ -136,19 +145,28 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   }
 
   const memo = new Map<string, CountResult>()
-  const zeroResult = (): CountResult => ({ worlds: 0n, counts: Array<bigint>(valueCount).fill(0n) })
+  const zeroResult = (): CountResult => ({ worlds: 0n, counts: Array<bigint>(valueCount).fill(0n), envelopeCombos: Array<bigint>(comboCount).fill(0n) })
 
-  function count(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>, mask: number): CountResult {
+  function envelopeComboIndex(selection: EnvelopeSelection) {
+    if (selection.suspect < 0 || selection.weapon < 0 || selection.room < 0) return -1
+    return (selection.suspect * cardsByType.weapon.length * cardsByType.room.length) + (selection.weapon * cardsByType.room.length) + selection.room
+  }
+
+  function count(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>, mask: number, envelopeSelection: EnvelopeSelection): CountResult {
     if (!canFinishCounts(index, playerRemaining, envelopeByType)) return zeroResult()
     if (!possibleClauses(index, mask)) return zeroResult()
     if (index === cardsToAssign.length) {
       if (playerRemaining.some((n) => n !== 0)) return zeroResult()
       if (Object.values(envelopeByType).some((n) => n !== 0)) return zeroResult()
       if (clauses.some((_, clauseIndex) => !(mask & (1 << clauseIndex)))) return zeroResult()
-      return { worlds: 1n, counts: Array<bigint>(valueCount).fill(0n) }
+      const base = zeroResult()
+      base.worlds = 1n
+      const comboIndex = envelopeComboIndex(envelopeSelection)
+      if (comboIndex >= 0) base.envelopeCombos[comboIndex] = 1n
+      return base
     }
 
-    const key = `${index}|${playerRemaining.join(',')}|${envelopeByType.suspect},${envelopeByType.weapon},${envelopeByType.room}|${mask}`
+    const key = `${index}|${playerRemaining.join(',')}|${envelopeByType.suspect},${envelopeByType.weapon},${envelopeByType.room}|${mask}|${envelopeSelection.suspect},${envelopeSelection.weapon},${envelopeSelection.room}`
     const cached = memo.get(key)
     if (cached) return cached
 
@@ -160,7 +178,11 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
       const nextPlayers = [...playerRemaining]
       const nextEnvelope = { ...envelopeByType }
-      if (loc === 'envelope') nextEnvelope[card.type] -= 1
+      const nextEnvelopeSelection = { ...envelopeSelection }
+      if (loc === 'envelope') {
+        nextEnvelope[card.type] -= 1
+        nextEnvelopeSelection[card.type] = typeCardIndex[card.type][card.id]
+      }
       else nextPlayers[playerIndex[loc]] -= 1
 
       let nextMask = mask
@@ -168,18 +190,19 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
         if (loc === clause.playerId && clauseCardSets[clauseIndex].has(card.id)) nextMask |= 1 << clauseIndex
       }
 
-      const child = count(index + 1, nextPlayers, nextEnvelope, nextMask)
+      const child = count(index + 1, nextPlayers, nextEnvelope, nextMask, nextEnvelopeSelection)
       if (child.worlds === 0n) continue
       total.worlds += child.worlds
       total.counts[game.cards.indexOf(card) * locations.length + locationIndex[loc]] += child.worlds
       for (let i = 0; i < valueCount; i++) total.counts[i] += child.counts[i]
+      for (let i = 0; i < comboCount; i++) total.envelopeCombos[i] += child.envelopeCombos[i]
     }
 
     memo.set(key, total)
     return total
   }
 
-  const result = count(0, remaining, envelopeRemaining, initialClauseMask)
+  const result = count(0, remaining, envelopeRemaining, initialClauseMask, initialEnvelopeSelection)
 
   if (result.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
 
@@ -207,7 +230,11 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     return [type, cards[0] ?? null]
   })) as SolverResult['envelopePick']
   const accusationProbability = envelopePick.suspect && envelopePick.weapon && envelopePick.room
-    ? (probabilities[envelopePick.suspect.cardId].envelope * probabilities[envelopePick.weapon.cardId].envelope * probabilities[envelopePick.room.cardId].envelope)
+    ? Number(result.envelopeCombos[envelopeComboIndex({
+      suspect: typeCardIndex.suspect[envelopePick.suspect.cardId],
+      weapon: typeCardIndex.weapon[envelopePick.weapon.cardId],
+      room: typeCardIndex.room[envelopePick.room.cardId],
+    })] ?? 0n) / Number(result.worlds)
     : 0
 
   return { status: 'exact', worlds: Number(result.worlds), cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
