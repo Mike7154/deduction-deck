@@ -181,6 +181,7 @@ function App() {
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
+  const [quickMark, setQuickMark] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [setupMode, setSetupMode] = useState(false)
   const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
   const [collapsedTypes, setCollapsedTypes] = useState<Record<CardType, boolean>>({ suspect: false, weapon: false, room: false })
@@ -194,6 +195,7 @@ function App() {
     setGame(loadGame(normalized))
     setStats(loadStats(normalized))
     setSelected(null)
+    setQuickMark(null)
     setMatrixMode('probabilities')
     setDetailCardId(null)
     setSetupMode(false)
@@ -204,6 +206,7 @@ function App() {
     localStorage.removeItem(sessionKey)
     setUserEmail(null)
     setSelected(null)
+    setQuickMark(null)
     setDetailCardId(null)
     setSetupMode(false)
   }
@@ -222,6 +225,7 @@ function App() {
       for (const loc of locations) if (loc !== locationId) next.marks[cardId][loc] = 'no'
     }
     updateGame(next)
+    setQuickMark(null)
   }
 
   function applyDeductions() {
@@ -269,6 +273,8 @@ function App() {
   const selectedCard = selected ? cardById(game.cards, selected.cardId) : null
   const selectedLocation = selected?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, selected?.locationId ?? '')?.name
   const detailCard = detailCardId ? cardById(game.cards, detailCardId) : null
+  const quickMarkCard = quickMark ? cardById(game.cards, quickMark.cardId) : null
+  const quickMarkLocation = quickMark?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, quickMark?.locationId ?? '')?.name
 
   if (!userEmail) return <AuthScreen onAuthenticated={activateUser} />
   if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { updateGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setDetailCardId(null); setMatrixMode('probabilities') }} onLogout={logout} />
@@ -296,7 +302,7 @@ function App() {
             </div>
           </div>
           {matrixMode === 'probabilities'
-            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={setSelected} onSetMark={setMark} onOpenCard={setDetailCardId} />
+            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={(cell) => { setSelected(cell); setQuickMark(cell) }} onSetMark={setMark} onOpenCard={setDetailCardId} />
             : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} />}
         </section>
 
@@ -306,6 +312,7 @@ function App() {
           <BehaviorPanel game={game} stats={stats} onFinish={finishGame} />
         </aside>
       </main>
+      {quickMark && quickMarkCard && <QuickMarkSheet card={quickMarkCard} locationName={quickMarkLocation ?? quickMark.locationId} onSet={(mark) => setMark(quickMark.cardId, quickMark.locationId, mark)} onClose={() => setQuickMark(null)} />}
       {detailCard && <CardDetailModal card={detailCard} game={game} solver={solver} onClose={() => setDetailCardId(null)} />}
     </div>
   )
@@ -500,6 +507,15 @@ function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChang
       <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
     </>}
   </section>
+}
+
+function QuickMarkSheet({ card, locationName, onSet, onClose }: { card: Card; locationName: string; onSet: (mark: Mark) => void; onClose: () => void }) {
+  return <div className="quick-mark-backdrop" onClick={onClose}>
+    <section className="quick-mark-sheet panel" onClick={(event) => event.stopPropagation()}>
+      <div><strong>{card.name}</strong><span>{locationName}</span></div>
+      <div className="quick-mark-actions"><button className="primary" onClick={() => onSet('yes')}>Mark yes</button><button onClick={() => onSet('no')}>Mark no</button><button onClick={() => onSet('unknown')}>Clear</button></div>
+    </section>
+  </div>
 }
 
 function SuggestionForm({ game, onAdd, onSkip }: { game: GameState; onAdd: (s: Suggestion) => void; onSkip: () => void }) {

@@ -408,3 +408,27 @@ th:first-child { width: 124px; }
   .setup-card > .muted { margin-bottom: 0; }
   .summary-list { margin-top: 10px; }
 }
+
+.quick-mark-backdrop { display: none; }
+@media (max-width: 640px) {
+  .quick-mark-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(8, 5, 4, .45);
+    backdrop-filter: blur(3px);
+  }
+  .quick-mark-sheet {
+    width: 100%;
+    padding: 14px;
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
+  }
+  .quick-mark-sheet div:first-child { display: grid; gap: 3px; margin-bottom: 12px; }
+  .quick-mark-sheet strong { color: #f7e8cf; font-size: 18px; }
+  .quick-mark-sheet span { color: #bda98b; font-size: 13px; }
+  .quick-mark-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .quick-mark-actions button { padding: 12px 8px; }
+}
