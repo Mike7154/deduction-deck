@@ -432,3 +432,21 @@ th:first-child { width: 124px; }
   .quick-mark-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .quick-mark-actions button { padding: 12px 8px; }
 }
+
+/* Slightly more compact default mobile scale */
+@media (max-width: 640px) {
+  .workspace { padding: 6px; gap: 8px; }
+  .topbar { padding: 8px; gap: 8px; }
+  .sidebar, .inspector { padding: 6px; gap: 8px; }
+  .matrix-panel { padding: 8px; }
+  .setup-card, .suggestion-card, .deduction-card, .behavior-card, .inspector section, .sidebar section { padding: 8px; }
+  button { padding: 8px 9px; }
+  input, select { padding: 8px 9px; }
+  h1 { font-size: 23px; }
+  h2 { font-size: 11px; }
+  p, .muted { font-size: 12px; }
+  .current-turn-box { padding: 8px; }
+  .form-grid { gap: 8px; }
+  .summary-list { gap: 6px; }
+  .summary-list div { padding: 6px 8px; }
+}
