@@ -335,10 +335,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => v
       return
     }
 
-    if (!exists) {
-      setError('No account exists for that email yet. Sign up first.')
-      return
-    }
+    if (!exists) saveUsers([...users, { email: normalized, createdAt: Date.now() }])
     onAuthenticated(normalized)
   }
 
@@ -346,12 +343,12 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => v
     <section className="auth-card panel">
       <div className="brand auth-brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>Private local game spaces</small></div></div>
       <h1>{mode === 'login' ? 'Log in' : 'Sign up'}</h1>
-      <p className="muted">Use a valid email to keep each player’s game board and behavior hints separate on this device.</p>
+      <p className="muted">Use a valid email to keep each player's game board and behavior hints separate on this device.</p>
       <label className="field"><span>Email</span><input type="email" autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} onKeyDown={(e) => { if (e.key === 'Enter') submit() }} placeholder="you@example.com" /></label>
       {error && <p className="auth-error">{error}</p>}
       <button className="primary wide" onClick={submit}>{mode === 'login' ? 'Log in' : 'Create account'}</button>
       <button className="link-button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError('') }}>{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button>
-      <p className="local-note">Accounts are local to this browser; this is separation, not secure cloud authentication.</p>
+      <p className="local-note">Accounts are local to this browser. If the account list is missing after an update, logging in with the same email will relink that local save.</p>
     </section>
   </div>
 }
