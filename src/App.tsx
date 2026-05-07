@@ -69,17 +69,6 @@ function loadStats(email: string): BehaviorStats {
   }
 }
 
-function migrateLegacyDataForFirstUser(email: string) {
-  if (localStorage.getItem(userScopedKey(saveKey, email)) === null) {
-    const legacyGame = localStorage.getItem(saveKey)
-    if (legacyGame) localStorage.setItem(userScopedKey(saveKey, email), legacyGame)
-  }
-  if (localStorage.getItem(userScopedKey(statsKey, email)) === null) {
-    const legacyStats = localStorage.getItem(statsKey)
-    if (legacyStats) localStorage.setItem(userScopedKey(statsKey, email), legacyStats)
-  }
-}
-
 const pct = (n: number) => `${Math.round(n * 100)}%`
 const cardById = (cards: Card[], id: string) => cards.find((c) => c.id === id)
 const playerById = (players: Player[], id: string) => players.find((p) => p.id === id)
@@ -341,7 +330,6 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => v
         setError('That email already has an account. Log in instead.')
         return
       }
-      if (users.length === 0) migrateLegacyDataForFirstUser(normalized)
       saveUsers([...users, { email: normalized, createdAt: Date.now() }])
       onAuthenticated(normalized)
       return

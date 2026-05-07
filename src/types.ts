@@ -61,12 +61,12 @@ export const defaultCards: Card[] = [
 ]
 
 export const defaultPlayers: Player[] = [
-  { id: 'me', name: 'Me', cardCount: 3, turnOrder: 1, isMe: true },
-  { id: 'asher', name: 'Asher', cardCount: 3, turnOrder: 2 },
-  { id: 'lucas', name: 'Lucas', cardCount: 3, turnOrder: 3 },
-  { id: 'charles', name: 'Charles', cardCount: 3, turnOrder: 4 },
-  { id: 'lexis', name: 'Lexis', cardCount: 3, turnOrder: 5 },
-  { id: 'katie', name: 'Katie', cardCount: 3, turnOrder: 6 },
+  { id: 'p1', name: 'P1', cardCount: 3, turnOrder: 1, isMe: true },
+  { id: 'p2', name: 'P2', cardCount: 3, turnOrder: 2 },
+  { id: 'p3', name: 'P3', cardCount: 3, turnOrder: 3 },
+  { id: 'p4', name: 'P4', cardCount: 3, turnOrder: 4 },
+  { id: 'p5', name: 'P5', cardCount: 3, turnOrder: 5 },
+  { id: 'p6', name: 'P6', cardCount: 3, turnOrder: 6 },
 ]
 
 export function createBlankMarks(cards = defaultCards, players = defaultPlayers) {
