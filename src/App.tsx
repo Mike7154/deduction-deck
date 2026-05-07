@@ -152,8 +152,8 @@ function nextPlayerId(game: GameState, currentId = game.activeSuggesterId) {
   return players[(idx + 1) % players.length]?.id ?? currentId
 }
 
-function countsFor(game: GameState, playerId: string) {
-  const known = game.cards.filter((c) => game.marks[c.id]?.[playerId] === 'yes').length
+function countsFor(game: GameState, playerId: string, solver?: SolverResult) {
+  const known = game.cards.filter((c) => game.marks[c.id]?.[playerId] === 'yes' || solver?.probabilities[c.id]?.[playerId] === 1).length
   const impossible = game.cards.filter((c) => game.marks[c.id]?.[playerId] === 'no').length
   const target = playerById(game.players, playerId)?.cardCount ?? 0
   return { known, unknownInHand: Math.max(0, target - known), possible: game.cards.length - known - impossible }
@@ -594,7 +594,7 @@ function TypeHeader({ type, game, solver, collapsed, onToggle, colSpan }: { type
 function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
   return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc}>{loc === 'envelope' ? 'Envelope' : playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
-  </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc}>3 cards</td> : <td key={loc}>{countsFor(game, loc).known} known<br />{countsFor(game, loc).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
+  </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc}>3 cards</td> : <td key={loc}>{countsFor(game, loc, solver).known} known<br />{countsFor(game, loc, solver).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
 }
 
 function GroupedRows({ type, game, solver, locations, selected, collapsed, onToggle, onSelect, onSetMark, onOpenCard }: { type: CardType; game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsed: boolean; onToggle: () => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
