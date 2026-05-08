@@ -6,6 +6,7 @@ export type SolverResult = {
   cappedAt: number
   probabilities: Record<string, Record<LocationId, number>>
   deductions: Array<{ cardId: string; locationId: LocationId; mark: 'yes' | 'no'; reason: string }>
+  behaviorWeights: Array<{ playerId: string; cardIds: string[]; repeatedCardIds: string[]; penalty: number; reason: string }>
   envelopePick: Record<CardType, { cardId: string; probability: number } | null>
   accusationProbability: number
   messages: string[]
@@ -322,7 +323,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     accusationProbability = useWeightedProbabilities ? combo.weightedWorlds / result.weightedWorlds : Number(combo.worlds) / Number(result.worlds)
   }
 
-  return { status: 'exact', worlds: Number(result.worlds), cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
+  return { status: 'exact', worlds: Number(result.worlds), cappedAt: maxWorlds, probabilities, deductions, behaviorWeights: softClauses.map(({ playerId, cardIds, repeatedCardIds, penalty, reason }) => ({ playerId, cardIds, repeatedCardIds, penalty, reason })), envelopePick, accusationProbability, messages }
 }
 
 function contradiction(game: GameState, maxWorlds: number, message: string): SolverResult {
@@ -332,6 +333,7 @@ function contradiction(game: GameState, maxWorlds: number, message: string): Sol
     cappedAt: maxWorlds,
     probabilities: emptyProbabilities(game.cards, ['envelope', ...game.players.map((p) => p.id)]),
     deductions: [],
+    behaviorWeights: [],
     envelopePick: { suspect: null, weapon: null, room: null },
     accusationProbability: 0,
     messages: [message],

@@ -976,15 +976,42 @@ function CardActionRow({ card, game, solver, suggestion }: { card: Card; game: G
 }
 
 function CurrentDeduction({ game, solver }: { game: GameState; solver: SolverResult }) {
+  const [behaviorOpen, setBehaviorOpen] = useState(false)
   const accusation = (['suspect', 'weapon', 'room'] as CardType[]).map((type) => solver.envelopePick[type] ? cardById(game.cards, solver.envelopePick[type]!.cardId)?.name : '?')
   return <section className="deduction-card">
     <h2>Current deduction</h2>
     <div className="accusation"><span>{accusation[0]}</span><span>{accusation[1]}</span><span>{accusation[2]}</span></div>
     <div className="deduction-prob"><span>Combo probability</span><strong>{pct(solver.accusationProbability)}</strong></div>
     <div className={`status ${solver.status}`}>{solver.status === 'exact' ? 'Exact solver' : solver.status === 'capped' ? 'Capped enumeration' : 'Contradiction'}</div>
+    {solver.behaviorWeights.length > 0 && <button className="wide" onClick={() => setBehaviorOpen(true)}>View {solver.behaviorWeights.length} behavior impact{solver.behaviorWeights.length === 1 ? '' : 's'}</button>}
     {solver.status === 'contradiction' && game.behaviorOptIn && <p className="message">Behavior heuristics are on. If the entries are correct, try turning them off in Game setup; the contradiction may mean someone guessed all three cards from their own hand.</p>}
     {solver.messages.map((m) => <p className="message" key={m}>{m}</p>)}
+    {behaviorOpen && <BehaviorWeightsModal game={game} solver={solver} onClose={() => setBehaviorOpen(false)} />}
   </section>
+}
+
+function BehaviorWeightsModal({ game, solver, onClose }: { game: GameState; solver: SolverResult; onClose: () => void }) {
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="behavior-impact-title" onClick={onClose}>
+    <section className="card-modal panel" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head">
+        <div>
+          <h1 id="behavior-impact-title">Behavior impacts</h1>
+          <p>These soft weights are currently changing the displayed probabilities. They are not hard Clue rules.</p>
+        </div>
+        <button onClick={onClose}>Close</button>
+      </div>
+      <section className="detail-block action-history">
+        {solver.behaviorWeights.map((weight, index) => {
+          const player = playerById(game.players, weight.playerId)?.name ?? 'Unknown player'
+          return <article className="action-row" key={`${weight.playerId}-${weight.cardIds.join('-')}-${index}`}>
+            <div className="action-main"><strong>{player}</strong><span>{comboLabel(game, [...weight.cardIds, ...weight.repeatedCardIds])}</span></div>
+            <p>Because the asker later repeated <strong>{comboLabel(game, weight.repeatedCardIds)}</strong>, worlds where that repeated card was the likely shown card are down-weighted. This favors <strong>{comboLabel(game, weight.cardIds)}</strong> as what {player} may have shown.</p>
+            <small>Weight applied: {Math.round(weight.penalty * 100)}% for the repeated-card explanation.</small>
+          </article>
+        })}
+      </section>
+    </section>
+  </div>
 }
 
 function SelectionInspector({ selectedCard, selectedLocation, selected, solver, onSetMark }: { selectedCard: Card | null | undefined; selectedLocation: string | undefined; selected: { cardId: string; locationId: LocationId } | null; solver: SolverResult; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void }) {
