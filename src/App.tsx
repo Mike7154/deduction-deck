@@ -850,6 +850,7 @@ function CurrentDeduction({ game, solver }: { game: GameState; solver: SolverRes
     <div className="accusation"><span>{accusation[0]}</span><span>{accusation[1]}</span><span>{accusation[2]}</span></div>
     <div className="deduction-prob"><span>Combo probability</span><strong>{pct(solver.accusationProbability)}</strong></div>
     <div className={`status ${solver.status}`}>{solver.status === 'exact' ? 'Exact solver' : solver.status === 'capped' ? 'Capped enumeration' : 'Contradiction'}</div>
+    {solver.status === 'contradiction' && game.behaviorOptIn && <p className="message">Behavior heuristics are on. If the entries are correct, try turning them off in Game setup; the contradiction may mean someone guessed all three cards from their own hand.</p>}
     {solver.messages.map((m) => <p className="message" key={m}>{m}</p>)}
   </section>
 }
@@ -870,7 +871,7 @@ function EvidenceLog({ game, solver, likelyBadSuggestionIds, onToggleDisabled }:
     <h2>Evidence log</h2>
     <p className="microcopy">Probabilities below use the current board, so older entries update as new evidence is added.</p>
     {solver.status === 'contradiction' && <p className="hint danger-hint">
-      Contradiction found. Highlighted entries are likely suspects because disabling that single entry makes the board valid again.
+      Contradiction found. Highlighted entries are likely suspects because disabling that single entry makes the board valid again. If no entry looks wrong, turn off behavior heuristics in Game setup; someone may have guessed all three cards from their own hand.
     </p>}
     <div className="log-list">
       {game.suggestions.length ? game.suggestions.map((s) => {
