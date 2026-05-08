@@ -800,18 +800,21 @@ function playerBehaviorNotes(game: GameState, solver: SolverResult, player: Play
     for (const later of laterBySameSuggester) for (const cardId of later.cardIds) if (suggestion.cardIds.includes(cardId)) repeated.add(cardId)
     if (!repeated.size) continue
     const alternatives = suggestion.cardIds.filter((cardId) => !repeated.has(cardId))
+    const disproverId = suggestion.result.disproverId
+    const repeatedForced = [...repeated].some((cardId) => (solver.probabilities[cardId]?.[disproverId] ?? 0) === 1)
+    const alternativeForced = alternatives.some((cardId) => (solver.probabilities[cardId]?.[disproverId] ?? 0) === 1)
     if (suggestion.suggesterId === player.id) {
       notes.push({
-        title: 'Repeated a card after an unknown show',
-        text: `${player.name} later repeated ${comboLabel(game, [...repeated])}. Behavior weighting treats the repeated card(s) as less likely to have been shown earlier, pushing toward ${comboLabel(game, alternatives)} if those are still plausible.`,
+        title: repeatedForced || alternativeForced ? 'Repeat clue skipped' : 'Repeated a card after an unknown show',
+        text: `${player.name} later repeated ${comboLabel(game, [...repeated])}. ${repeatedForced ? 'The repeated card is now forced to the disprover, so the solver skips this behavior weight.' : alternativeForced ? 'A non-repeated alternative is now forced to the disprover, so the behavior explanation is already satisfied and the solver skips this weight.' : `Behavior weighting treats the repeated card(s) as less likely to have been shown earlier, pushing toward ${comboLabel(game, alternatives)} if those are still plausible.`}`,
         cards: cardList(game, suggestion.cardIds),
       })
     }
     if (suggestion.result.disproverId === player.id) {
-      const alreadyExplained = alternatives.some((cardId) => (solver.probabilities[cardId]?.[player.id] ?? 0) === 1)
+      const alreadyExplained = repeatedForced || alternativeForced
       notes.push({
-        title: alreadyExplained ? 'Repeat clue already explained' : 'Repeat clue affects this disproof',
-        text: `${player.name} disproved ${comboLabel(game, suggestion.cardIds)}. The asker later repeated ${comboLabel(game, [...repeated])}, so the behavior model favors ${comboLabel(game, alternatives)} as what ${player.name} may have shown${alreadyExplained ? '; one alternative is already forced, so the solver does not add extra pressure.' : '.'}`,
+        title: alreadyExplained ? 'Repeat clue skipped' : 'Repeat clue affects this disproof',
+        text: `${player.name} disproved ${comboLabel(game, suggestion.cardIds)}. The asker later repeated ${comboLabel(game, [...repeated])}. ${repeatedForced ? 'Because the repeated card is now forced to this disprover, the solver skips this behavior weight.' : alternativeForced ? 'Because a non-repeated alternative is already forced to this disprover, the behavior explanation is satisfied and the solver skips this weight.' : `The behavior model favors ${comboLabel(game, alternatives)} as what ${player.name} may have shown.`}`,
         cards: cardList(game, suggestion.cardIds),
       })
     }

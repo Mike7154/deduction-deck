@@ -13,7 +13,7 @@ export type SolverResult = {
 
 type Clause = { playerId: string; cardIds: string[]; kind: 'atLeastOne' }
 type AntiClause = { playerId: string; cardIds: string[]; kind: 'notAll' }
-type SoftClause = { playerId: string; cardIds: string[]; penalty: number; reason: string }
+type SoftClause = { playerId: string; cardIds: string[]; repeatedCardIds: string[]; penalty: number; reason: string }
 type NoFact = { playerId: string; cardIds: string[] }
 type CountResult = { worlds: bigint; counts: bigint[]; weightedWorlds: number; weightedCounts: number[] }
 
@@ -77,6 +77,7 @@ function repeatShownCardSoftClauses(cards: Card[], suggestions: Suggestion[]) {
     softClauses.push({
       playerId: suggestion.result.disproverId,
       cardIds: alternatives,
+      repeatedCardIds: [...repeated],
       penalty: repeatedPair ? (repeatsRoom ? 0.08 : 0.02) : (repeatsRoom ? 0.15 : 0.05),
       reason: repeatedPair ? 'repeat-two-shown-cards' : 'repeat-shown-card',
     })
@@ -268,10 +269,13 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
   if (unweightedResult.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
 
-  softClauses = rawSoftClauses.filter((clause) => !clause.cardIds.some((cardId) => {
-    const valueIndex = game.cards.findIndex((card) => card.id === cardId) * locations.length + locationIndex[clause.playerId]
-    return Number(unweightedResult.counts[valueIndex]) / Number(unweightedResult.worlds) === 1
-  }))
+  const hardProbability = (cardId: string, playerId: string) => {
+    const valueIndex = game.cards.findIndex((card) => card.id === cardId) * locations.length + locationIndex[playerId]
+    return Number(unweightedResult.counts[valueIndex]) / Number(unweightedResult.worlds)
+  }
+  softClauses = rawSoftClauses
+    .filter((clause) => !clause.cardIds.some((cardId) => hardProbability(cardId, clause.playerId) === 1))
+    .filter((clause) => !clause.repeatedCardIds.some((cardId) => hardProbability(cardId, clause.playerId) === 1))
   softCardSets = softClauses.map((clause) => new Set(clause.cardIds))
 
   const initialSoftMask = initialSoftMaskForCurrentClauses()
