@@ -108,7 +108,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const probabilities = emptyProbabilities(game.cards, locations)
   const messages: string[] = []
   const { noFacts, clauses, antiClauses, yesFacts } = suggestionFacts(players, game.suggestions)
-  const softClauses = game.behaviorOptIn ? repeatShownCardSoftClauses(game.cards, game.suggestions) : []
+  const rawSoftClauses = game.behaviorOptIn ? repeatShownCardSoftClauses(game.cards, game.suggestions) : []
 
   const hardMarks: GameState['marks'] = structuredClone(game.marks)
   for (const no of noFacts) for (const cardId of no.cardIds) hardMarks[cardId][no.playerId] = hardMarks[cardId][no.playerId] === 'yes' ? 'yes' : 'no'
@@ -116,7 +116,8 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const clauseCardSets = clauses.map((clause) => new Set(clause.cardIds))
   const behavioralClauses = game.behaviorOptIn ? antiClauses : []
   const behavioralCardSets = behavioralClauses.map((clause) => new Set(clause.cardIds))
-  const softCardSets = softClauses.map((clause) => new Set(clause.cardIds))
+  let softClauses: SoftClause[] = []
+  let softCardSets: Set<string>[] = []
   const valueCount = game.cards.length * locations.length
 
   for (const card of game.cards) {
@@ -154,9 +155,12 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     })) initialBehavioralMask |= 1n << BigInt(clauseIndex)
   }
 
-  let initialSoftMask = 0n
-  for (const [clauseIndex, clause] of softClauses.entries()) {
-    if (clause.cardIds.some((cardId) => forcedLocation(hardMarks[cardId]) === clause.playerId)) initialSoftMask |= 1n << BigInt(clauseIndex)
+  function initialSoftMaskForCurrentClauses() {
+    let mask = 0n
+    for (const [clauseIndex, clause] of softClauses.entries()) {
+      if (clause.cardIds.some((cardId) => forcedLocation(hardMarks[cardId]) === clause.playerId)) mask |= 1n << BigInt(clauseIndex)
+    }
+    return mask
   }
 
   function baseAllowedFor(card: Card): LocationId[] {
@@ -260,9 +264,20 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     return total
   }
 
-  const result = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, initialSoftMask, new Map(), baseAllowedFor)
+  const unweightedResult = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, 0n, new Map(), baseAllowedFor)
 
-  if (result.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
+  if (unweightedResult.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
+
+  softClauses = rawSoftClauses.filter((clause) => !clause.cardIds.some((cardId) => {
+    const valueIndex = game.cards.findIndex((card) => card.id === cardId) * locations.length + locationIndex[clause.playerId]
+    return Number(unweightedResult.counts[valueIndex]) / Number(unweightedResult.worlds) === 1
+  }))
+  softCardSets = softClauses.map((clause) => new Set(clause.cardIds))
+
+  const initialSoftMask = initialSoftMaskForCurrentClauses()
+  const result = softClauses.length
+    ? count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, initialSoftMask, new Map(), baseAllowedFor)
+    : unweightedResult
 
   const useWeightedProbabilities = game.behaviorOptIn && softClauses.length > 0 && result.weightedWorlds > 0
 
