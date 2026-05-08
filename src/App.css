@@ -37,6 +37,7 @@
 .auth-error { color: #ffb6ad; background: rgba(222, 91, 78, .16); border: 1px solid rgba(222, 91, 78, .24); border-radius: 14px; padding: 10px 12px; font-size: 13px; }
 .link-button { width: 100%; margin-top: 10px; background: transparent; border-color: transparent; color: #e8be78; }
 .local-note { margin: 14px 0 0; font-size: 12px; color: #927f67; text-align: center; }
+.hidden-file-input { display: none; }
 button {
   background: rgba(247, 224, 183, .09);
   color: #f7e5c7;
@@ -205,6 +206,17 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
   cursor: pointer;
 }
 .card-link:hover { color: #e8be78; text-decoration: underline; transform: none; background: transparent; border-color: transparent; }
+.header-link {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  font: inherit;
+  font-weight: 900;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.header-link:hover { color: #b9f0cf; text-decoration: underline; transform: none; background: transparent; border-color: transparent; }
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -221,6 +233,7 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
   overflow: auto;
   padding: 22px;
 }
+.player-modal { width: min(1120px, 100%); }
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .modal-head h1 { margin-bottom: 6px; }
 .card-detail-grid { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }

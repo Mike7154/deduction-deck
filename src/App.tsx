@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import './App.css'
 import { createBlankMarks, createDefaultGame, defaultCards, defaultPlayers, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
 import { solveGame, type SolverResult } from './solver'
@@ -252,6 +252,7 @@ function App() {
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
+  const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null)
   const [quickMark, setQuickMark] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [setupMode, setSetupMode] = useState(false)
   const [setupDraft, setSetupDraft] = useState<GameState>(() => createDefaultGame())
@@ -275,6 +276,7 @@ function App() {
     setQuickMark(null)
     setMatrixMode('probabilities')
     setDetailCardId(null)
+    setDetailPlayerId(null)
     setSetupMode(false)
   }
 
@@ -300,6 +302,7 @@ function App() {
     setSelected(null)
     setQuickMark(null)
     setDetailCardId(null)
+    setDetailPlayerId(null)
     localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(previous))
   }
 
@@ -367,6 +370,7 @@ function App() {
   const selectedCard = selected ? cardById(game.cards, selected.cardId) : null
   const selectedLocation = selected?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, selected?.locationId ?? '')?.name
   const detailCard = detailCardId ? cardById(game.cards, detailCardId) : null
+  const detailPlayer = detailPlayerId ? playerById(game.players, detailPlayerId) : null
   const quickMarkCard = quickMark ? cardById(game.cards, quickMark.cardId) : null
   const quickMarkLocation = quickMark?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, quickMark?.locationId ?? '')?.name
 
@@ -375,7 +379,7 @@ function App() {
 
   return (
     <div className="app-shell" data-theme={theme}>
-      <TopBar game={game} theme={theme} onToggleTheme={toggleTheme} canUndo={undoStack.length > 0} onUndo={undoLastChange} onResetLocal={resetLocalGame} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(game))} />
+      <TopBar game={game} theme={theme} onToggleTheme={toggleTheme} canUndo={undoStack.length > 0} onUndo={undoLastChange} onResetLocal={resetLocalGame} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null); setDetailPlayerId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(game))} onImport={(imported) => { replaceGame(imported); setSelected(null); setQuickMark(null); setDetailCardId(null); setDetailPlayerId(null); setMatrixMode('probabilities'); setSetupMode(false) }} />
       <main className="workspace">
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
@@ -394,8 +398,8 @@ function App() {
             </div>
           </div>
           {matrixMode === 'probabilities'
-            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={(cell) => { setSelected(cell); setQuickMark(cell) }} onSetMark={setMark} onOpenCard={setDetailCardId} />
-            : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} />}
+            ? <ProbabilityMatrix game={game} solver={solver} locations={locations} selected={selected} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onSelect={(cell) => { setSelected(cell); setQuickMark(cell) }} onSetMark={setMark} onOpenCard={setDetailCardId} onOpenPlayer={setDetailPlayerId} />
+            : <GuessMatrix game={game} solver={solver} locations={locations.filter((loc) => loc !== 'envelope')} collapsedTypes={collapsedTypes} onToggleType={(type) => setCollapsedTypes((next) => ({ ...next, [type]: !next[type] }))} onOpenCard={setDetailCardId} onOpenPlayer={setDetailPlayerId} />}
           <EvidenceLog game={game} solver={solver} likelyBadSuggestionIds={likelyBadSuggestionIds} onToggleDisabled={setSuggestionDisabled} />
         </section>
 
@@ -406,11 +410,13 @@ function App() {
       </main>
       {quickMark && quickMarkCard && <QuickMarkSheet card={quickMarkCard} locationName={quickMarkLocation ?? quickMark.locationId} onSet={(mark) => setMark(quickMark.cardId, quickMark.locationId, mark)} onClose={() => setQuickMark(null)} />}
       {detailCard && <CardDetailModal card={detailCard} game={game} solver={solver} onClose={() => setDetailCardId(null)} />}
+      {detailPlayer && <PlayerDetailModal player={detailPlayer} game={game} solver={solver} onClose={() => setDetailPlayerId(null)} />}
     </div>
   )
 }
 
-function TopBar({ game, theme, onToggleTheme, canUndo, onUndo, onResetLocal, onNew, onSave }: { game: GameState; theme: ThemeMode; onToggleTheme: () => void; canUndo: boolean; onUndo: () => void; onResetLocal: () => void; onNew: () => void; onSave: () => void }) {
+function TopBar({ game, theme, onToggleTheme, canUndo, onUndo, onResetLocal, onNew, onSave, onImport }: { game: GameState; theme: ThemeMode; onToggleTheme: () => void; canUndo: boolean; onUndo: () => void; onResetLocal: () => void; onNew: () => void; onSave: () => void; onImport: (game: GameState) => void }) {
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   function exportJson() {
     const blob = new Blob([JSON.stringify(game, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -418,9 +424,21 @@ function TopBar({ game, theme, onToggleTheme, canUndo, onUndo, onResetLocal, onN
     a.download = 'deduction-deck-game.json'
     a.click()
   }
+  async function importJson(file: File | undefined) {
+    if (!file) return
+    try {
+      const imported = JSON.parse(await file.text()) as GameState
+      if (!Array.isArray(imported.cards) || !Array.isArray(imported.players) || !imported.marks || !Array.isArray(imported.suggestions)) throw new Error('Invalid game file')
+      onImport(imported)
+    } catch (error) {
+      alert(`Could not import game: ${error instanceof Error ? error.message : 'invalid JSON'}`)
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
+  }
   return <header className="topbar">
     <div className="brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>Saved in this browser</small></div></div>
-    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onToggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onResetLocal}>Reload save</button></nav>
+    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onToggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={() => importInputRef.current?.click()}>Import</button><button onClick={onResetLocal}>Reload save</button><input ref={importInputRef} className="hidden-file-input" type="file" accept="application/json,.json" onChange={(event) => void importJson(event.target.files?.[0])} /></nav>
   </header>
 }
 
@@ -721,8 +739,8 @@ function TypeHeader({ type, game, solver, collapsed, onToggle, colSpan }: { type
   return <tr className="group-row"><td colSpan={colSpan}><button className="group-toggle" aria-label={`${collapsed ? 'Show' : 'Hide'} ${typeLabel[type]}`} onClick={onToggle}><span className="chevron">{collapsed ? '▶' : '▼'}</span>{typeLabel[type]}{envelopeLabel(game, solver, type)}</button></td></tr>
 }
 
-function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void }) {
-  return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => { const player = loc === 'envelope' ? null : playerById(game.players, loc); return <th key={loc} className={`${loc === 'envelope' ? 'envelope-col' : ''} ${player?.isMe ? 'me-col' : ''}`}>{loc === 'envelope' ? 'Envelope' : player?.name}</th> })}</tr></thead><tbody>
+function ProbabilityMatrix({ game, solver, locations, selected, collapsedTypes, onToggleType, onSelect, onSetMark, onOpenCard, onOpenPlayer }: { game: GameState; solver: SolverResult; locations: LocationId[]; selected: { cardId: string; locationId: LocationId } | null; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onSelect: (s: { cardId: string; locationId: LocationId }) => void; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void; onOpenCard: (cardId: string) => void; onOpenPlayer: (playerId: string) => void }) {
+  return <div className="matrix-wrap"><table className="matrix"><thead><tr><th>Card</th>{locations.map((loc) => { const player = loc === 'envelope' ? null : playerById(game.players, loc); return <th key={loc} className={`${loc === 'envelope' ? 'envelope-col' : ''} ${player?.isMe ? 'me-col' : ''}`}>{loc === 'envelope' ? 'Envelope' : <button className="header-link" onClick={() => onOpenPlayer(loc)}>{player?.name}</button>}</th> })}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <GroupedRows key={type} type={type} game={game} solver={solver} locations={locations} selected={selected} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} onSelect={onSelect} onSetMark={onSetMark} onOpenCard={onOpenCard} />)}
   </tbody><tfoot><tr><td>Known / unknown</td>{locations.map((loc) => loc === 'envelope' ? <td key={loc} className="envelope-col">3 cards</td> : <td key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}>{countsFor(game, loc, solver).known} known<br />{countsFor(game, loc, solver).unknownInHand} unknown</td>)}</tr></tfoot></table></div>
 }
@@ -750,8 +768,8 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
   </>
 }
 
-function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, onOpenCard }: { game: GameState; solver: SolverResult; locations: LocationId[]; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onOpenCard: (cardId: string) => void }) {
-  return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}>{playerById(game.players, loc)?.name}</th>)}</tr></thead><tbody>
+function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, onOpenCard, onOpenPlayer }: { game: GameState; solver: SolverResult; locations: LocationId[]; collapsedTypes: Record<CardType, boolean>; onToggleType: (type: CardType) => void; onOpenCard: (cardId: string) => void; onOpenPlayer: (playerId: string) => void }) {
+  return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}><button className="header-link" onClick={() => onOpenPlayer(loc)}>{playerById(game.players, loc)?.name}</button></th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <>
       <TypeHeader key={`${type}-group`} type={type} game={game} solver={solver} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} colSpan={locations.length + 1} />
       {!collapsedTypes[type] && game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
@@ -762,6 +780,112 @@ function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, on
       })}</tr>)}
     </>)}
   </tbody></table></div>
+}
+
+function cardList(game: GameState, ids: readonly string[]) {
+  return ids.map((id) => cardById(game.cards, id)).filter((card): card is Card => Boolean(card))
+}
+
+function comboLabel(game: GameState, ids: readonly string[]) {
+  return cardList(game, ids).map((card) => card.name).join(' / ')
+}
+
+function playerBehaviorNotes(game: GameState, solver: SolverResult, player: Player) {
+  const active = game.suggestions.filter((s) => !s.disabled).sort((a, b) => a.createdAt - b.createdAt)
+  const notes: Array<{ title: string; text: string; cards: Card[] }> = []
+  for (const [index, suggestion] of active.entries()) {
+    if (suggestion.result.kind !== 'unknown') continue
+    const laterBySameSuggester = active.slice(index + 1).filter((later) => later.suggesterId === suggestion.suggesterId)
+    const repeated = new Set<string>()
+    for (const later of laterBySameSuggester) for (const cardId of later.cardIds) if (suggestion.cardIds.includes(cardId)) repeated.add(cardId)
+    if (!repeated.size) continue
+    const alternatives = suggestion.cardIds.filter((cardId) => !repeated.has(cardId))
+    if (suggestion.suggesterId === player.id) {
+      notes.push({
+        title: 'Repeated a card after an unknown show',
+        text: `${player.name} later repeated ${comboLabel(game, [...repeated])}. Behavior weighting treats the repeated card(s) as less likely to have been shown earlier, pushing toward ${comboLabel(game, alternatives)} if those are still plausible.`,
+        cards: cardList(game, suggestion.cardIds),
+      })
+    }
+    if (suggestion.result.disproverId === player.id) {
+      const alreadyExplained = alternatives.some((cardId) => (solver.probabilities[cardId]?.[player.id] ?? 0) === 1)
+      notes.push({
+        title: alreadyExplained ? 'Repeat clue already explained' : 'Repeat clue affects this disproof',
+        text: `${player.name} disproved ${comboLabel(game, suggestion.cardIds)}. The asker later repeated ${comboLabel(game, [...repeated])}, so the behavior model favors ${comboLabel(game, alternatives)} as what ${player.name} may have shown${alreadyExplained ? '; one alternative is already forced, so the solver does not add extra pressure.' : '.'}`,
+        cards: cardList(game, suggestion.cardIds),
+      })
+    }
+  }
+  return notes
+}
+
+function PlayerDetailModal({ player, game, solver, onClose }: { player: Player; game: GameState; solver: SolverResult; onClose: () => void }) {
+  const asked = game.suggestions.filter((s) => !s.disabled && s.suggesterId === player.id)
+  const disproved = game.suggestions.filter((s) => !s.disabled && (s.result.kind === 'unknown' || s.result.kind === 'shown') && s.result.disproverId === player.id)
+  const repeatedCards = game.cards
+    .map((card) => ({ card, count: asked.filter((s) => s.cardIds.includes(card.id)).length, probability: solver.probabilities[card.id]?.[player.id] ?? 0, envelope: solver.probabilities[card.id]?.envelope ?? 0 }))
+    .filter(({ count }) => count > 1)
+    .sort((a, b) => b.count - a.count || b.envelope - a.envelope)
+  const behaviorNotes = playerBehaviorNotes(game, solver, player)
+  const holdings = game.cards
+    .map((card) => ({ card, probability: solver.probabilities[card.id]?.[player.id] ?? 0, mark: game.marks[card.id]?.[player.id] ?? 'unknown' }))
+    .filter(({ probability, mark }) => probability > 0 || mark === 'yes')
+    .sort((a, b) => b.probability - a.probability)
+
+  return <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="player-detail-title" onClick={onClose}>
+    <section className="card-modal player-modal panel" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head">
+        <div>
+          <h1 id="player-detail-title">{player.name}{player.isMe ? ' (Me)' : ''}</h1>
+          <p>{asked.length} suggestion{asked.length === 1 ? '' : 's'} made - {disproved.length} disproof{disproved.length === 1 ? '' : 's'} logged - {countsFor(game, player.id, solver).known}/{player.cardCount} cards known</p>
+        </div>
+        <button onClick={onClose}>Close</button>
+      </div>
+
+      <div className="card-detail-grid">
+        <section className="detail-block">
+          <h2>Likely hand</h2>
+          <div className="prob-list">{holdings.slice(0, 6).map(({ card, probability, mark }) => <div key={card.id}><span>{card.name}</span><strong>{mark === 'yes' ? 'YES' : pct(probability)}</strong></div>)}</div>
+        </section>
+        <section className="detail-block">
+          <h2>Top repeated guesses</h2>
+          <div className="repeat-list">{repeatedCards.length ? repeatedCards.slice(0, 6).map(({ card, count, probability, envelope }) => <div key={card.id}><strong>{count}x</strong><span>{card.name} - held {pct(probability)}, env {pct(envelope)}</span></div>) : <p className="muted">No repeated guessed cards.</p>}</div>
+        </section>
+        <section className="detail-block emphasis-block">
+          <span>Behavior explanations</span>
+          <strong>{behaviorNotes.length}</strong>
+          <p>These are soft hints. They explain where behavior weighting may be nudging the probabilities, not hard Clue rules.</p>
+        </section>
+      </div>
+
+      <section className="detail-block action-history">
+        <h2>Suggestions they made</h2>
+        {asked.length ? asked.map((suggestion) => <PlayerSuggestionRow key={suggestion.id} game={game} solver={solver} suggestion={suggestion} />) : <p className="muted">No suggestions made.</p>}
+      </section>
+      <section className="detail-block action-history">
+        <h2>Suggestions they disproved</h2>
+        {disproved.length ? disproved.map((suggestion) => <PlayerSuggestionRow key={suggestion.id} game={game} solver={solver} suggestion={suggestion} focusPlayerId={player.id} />) : <p className="muted">No disproofs logged.</p>}
+      </section>
+      <section className="detail-block action-history">
+        <h2>Behavior heuristic notes</h2>
+        {behaviorNotes.length ? behaviorNotes.map((note, index) => <article className="action-row" key={`${note.title}-${index}`}><div className="action-main"><strong>{note.title}</strong><span>{note.cards.map((card) => card.name).join(' / ')}</span></div><p>{note.text}</p></article>) : <p className="muted">No repeat-card behavior weights currently involve this player.</p>}
+      </section>
+    </section>
+  </div>
+}
+
+function PlayerSuggestionRow({ game, solver, suggestion, focusPlayerId }: { game: GameState; solver: SolverResult; suggestion: Suggestion; focusPlayerId?: string }) {
+  const guessedCards = cardList(game, suggestion.cardIds)
+  const suggester = playerById(game.players, suggestion.suggesterId)?.name ?? 'Unknown player'
+  const result = resultText(game, suggestion)
+  const targetId = focusPlayerId ?? (suggestion.result.kind === 'unknown' || suggestion.result.kind === 'shown' ? suggestion.result.disproverId : suggestion.suggesterId)
+  return <article className="action-row">
+    <div className="action-main"><strong>{suggester}</strong><span>{comboLabel(game, suggestion.cardIds)}</span></div>
+    <p>{result}</p>
+    <div className="card-prob-strip">{guessedCards.map((card) => <span className="prob-chip" key={card.id}><span>{card.name}</span><strong>{targetId ? pct(solver.probabilities[card.id]?.[targetId] ?? 0) : pct(solver.probabilities[card.id]?.envelope ?? 0)}</strong></span>)}</div>
+    <small>{focusPlayerId ? `Chips show chance ${playerById(game.players, focusPlayerId)?.name} holds each guessed card.` : 'Chips show current holder odds for the disprover/suggester context.'}</small>
+    <time>{new Date(suggestion.createdAt).toLocaleString()}</time>
+  </article>
 }
 
 
