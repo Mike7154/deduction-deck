@@ -18,6 +18,7 @@ function userScopedKey(baseKey: string, profileId = defaultProfileId) {
 function hydrateGame(game: GameState): GameState {
   return {
     ...game,
+    behaviorOptIn: game.behaviorOptIn ?? true,
     activeSuggesterId: game.activeSuggesterId ?? [...game.players].sort((a, b) => a.turnOrder - b.turnOrder)[0]?.id ?? game.players[0]?.id ?? 'me',
   }
 }
@@ -589,6 +590,10 @@ function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChang
         <strong>{player.cardCount}</strong>
         <span className="mini-reorder"><button aria-label={`Move ${player.name} earlier`} disabled={index === 0} onClick={() => movePlayer(player.id, -1)}>▲</button><button aria-label={`Move ${player.name} later`} disabled={index === game.players.length - 1} onClick={() => movePlayer(player.id, 1)}>▼</button></span>
       </div>)}</div>
+      <label className="hand-card-check">
+        <input type="checkbox" checked={game.behaviorOptIn} onChange={(event) => onChange({ ...game, behaviorOptIn: event.target.checked })} />
+        <span>Assume players do not guess all 3 cards from their own hand</span>
+      </label>
       <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
     </>}
   </section>
