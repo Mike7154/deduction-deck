@@ -125,6 +125,18 @@ function setSingleMe(players: Player[], id: string) {
   return players.map((player) => ({ ...player, isMe: player.id === id }))
 }
 
+function wasCardShownByMeTo(game: GameState, cardId: string, playerId: string) {
+  const meId = mePlayer(game.players)?.id
+  if (!meId || playerId === meId) return false
+  return game.suggestions.some((suggestion) =>
+    !suggestion.disabled &&
+    suggestion.suggesterId === playerId &&
+    suggestion.result.kind === 'shown' &&
+    suggestion.result.disproverId === meId &&
+    suggestion.result.shownCardId === cardId
+  )
+}
+
 function distributeCardCounts(players: Player[], cardTotal: number) {
   const dealCount = Math.max(0, cardTotal - 3)
   const count = Math.max(1, players.length)
@@ -750,8 +762,10 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
           const mark = game.marks[card.id][loc]
           const prob = solver.probabilities[card.id]?.[loc] ?? 0
           const isSelected = selected?.cardId === card.id && selected?.locationId === loc
-          return <td key={loc} className={`prob-cell ${loc === 'envelope' ? 'envelope-col' : ''} ${playerById(game.players, loc)?.isMe ? 'me-col' : ''} ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
-            {mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : pct(prob)}
+          const shownByMe = loc !== 'envelope' && wasCardShownByMeTo(game, card.id, loc)
+          const label = mark === 'yes' ? 'YES' : shownByMe ? 'shown' : mark === 'no' ? 'no' : pct(prob)
+          return <td key={loc} className={`prob-cell ${shownByMe ? 'shown-to-player' : ''} ${loc === 'envelope' ? 'envelope-col' : ''} ${playerById(game.players, loc)?.isMe ? 'me-col' : ''} ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} title={shownByMe ? `You showed ${card.name} to ${playerById(game.players, loc)?.name}` : undefined} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
+            {label}
           </td>
         })}
       </tr>
