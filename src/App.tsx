@@ -1,12 +1,10 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import './App.css'
-import { createBlankMarks, createDefaultGame, defaultCards, defaultPlayers, type BehaviorStats, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
+import { createBlankMarks, createDefaultGame, defaultCards, defaultPlayers, type Card, type CardType, type GameState, type LocationId, type Mark, type Player, type Suggestion, type SuggestionResult, typeLabel } from './types'
 import { solveGame, type SolverResult } from './solver'
 
 const saveKey = 'deduction-deck-game-v1'
-const statsKey = 'deduction-deck-behavior-stats-v1'
 const themeKey = 'deduction-deck-theme-v1'
-const phaseOptions = ['opening', 'middle', 'endgame'] as const
 
 type MatrixMode = 'probabilities' | 'guesses'
 type ThemeMode = 'dark' | 'light'
@@ -38,19 +36,6 @@ function loadGame(profileId: string): GameState {
     if (legacyRaw) return hydrateGame(JSON.parse(legacyRaw) as GameState)
   } catch { /* noop */ }
   return createDefaultGame()
-}
-
-function loadStats(profileId: string): BehaviorStats {
-  try {
-    const raw = localStorage.getItem(userScopedKey(statsKey, profileId))
-    if (raw) return JSON.parse(raw) as BehaviorStats
-
-    const legacyProfileId = loadLegacyProfileId()
-    const legacyRaw = legacyProfileId ? localStorage.getItem(userScopedKey(statsKey, legacyProfileId)) : null
-    return JSON.parse(legacyRaw ?? '{}') as BehaviorStats
-  } catch {
-    return {}
-  }
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
@@ -258,7 +243,6 @@ function withSuggestionDisabledForTest(game: GameState, suggestionId: string): G
 function App() {
   const [profileId] = useState(defaultProfileId)
   const [game, setGame] = useState<GameState>(() => loadGame(profileId))
-  const [stats, setStats] = useState<BehaviorStats>(() => loadStats(profileId))
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
@@ -281,7 +265,6 @@ function App() {
 
   function resetLocalGame() {
     setGame(loadGame(profileId))
-    setStats(loadStats(profileId))
     setSelected(null)
     setQuickMark(null)
     setMatrixMode('probabilities')
@@ -366,28 +349,6 @@ function App() {
     updateGame(next)
   }
 
-  function finishGame(envelope: Record<CardType, string>, playerHands: Record<string, string[]>, phase: string) {
-    const nextStats = structuredClone(stats)
-    for (const suggestion of game.suggestions) {
-      if (suggestion.disabled) continue
-      const holderCards = playerHands[suggestion.suggesterId] ?? []
-      for (const cardId of suggestion.cardIds) {
-        const key = `${suggestion.suggesterId}:${cardId}`
-        const held = holderCards.includes(cardId) ? 1 : 0
-        nextStats[key] ??= { suggested: 0, held: 0, byPhase: {} }
-        nextStats[key].suggested += 1
-        nextStats[key].held += held
-        nextStats[key].byPhase[phase] ??= { suggested: 0, held: 0 }
-        nextStats[key].byPhase[phase].suggested += 1
-        nextStats[key].byPhase[phase].held += held
-      }
-    }
-    const nextGame = structuredClone(game)
-    for (const type of Object.keys(envelope) as CardType[]) if (envelope[type]) nextGame.marks[envelope[type]].envelope = 'yes'
-    setStats(nextStats)
-    localStorage.setItem(userScopedKey(statsKey, profileId), JSON.stringify(nextStats))
-    updateGame(nextGame)
-  }
 
   function toggleTheme() {
     setTheme((current) => {
@@ -434,8 +395,7 @@ function App() {
 
         <aside className="inspector panel">
           <CurrentDeduction game={game} solver={solver} />
-          <SelectionInspector selectedCard={selectedCard} selectedLocation={selectedLocation} selected={selected} solver={solver} stats={stats} onSetMark={setMark} />
-          <BehaviorPanel game={game} stats={stats} onFinish={finishGame} />
+          <SelectionInspector selectedCard={selectedCard} selectedLocation={selectedLocation} selected={selected} solver={solver} onSetMark={setMark} />
         </aside>
       </main>
       {quickMark && quickMarkCard && <QuickMarkSheet card={quickMarkCard} locationName={quickMarkLocation ?? quickMark.locationId} onSet={(mark) => setMark(quickMark.cardId, quickMark.locationId, mark)} onClose={() => setQuickMark(null)} />}
@@ -889,17 +849,14 @@ function CurrentDeduction({ game, solver }: { game: GameState; solver: SolverRes
   </section>
 }
 
-function SelectionInspector({ selectedCard, selectedLocation, selected, solver, stats, onSetMark }: { selectedCard: Card | null | undefined; selectedLocation: string | undefined; selected: { cardId: string; locationId: LocationId } | null; solver: SolverResult; stats: BehaviorStats; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void }) {
+function SelectionInspector({ selectedCard, selectedLocation, selected, solver, onSetMark }: { selectedCard: Card | null | undefined; selectedLocation: string | undefined; selected: { cardId: string; locationId: LocationId } | null; solver: SolverResult; onSetMark: (cardId: string, loc: LocationId, mark: Mark) => void }) {
   if (!selected || !selectedCard) return <section><h2>Cell inspector</h2><p className="muted">Select a matrix cell to mark yes/no or inspect its reasoning.</p></section>
   const probability = solver.probabilities[selected.cardId]?.[selected.locationId] ?? 0
-  const statKey = selected.locationId !== 'envelope' ? `${selected.locationId}:${selected.cardId}` : ''
-  const stat = stats[statKey]
   return <section>
     <h2>Cell inspector</h2>
     <p><strong>{selectedCard.name}</strong> at <strong>{selectedLocation}</strong></p>
     <div className="big-prob">{pct(probability)}</div>
     <div className="button-row"><button onClick={() => onSetMark(selected.cardId, selected.locationId, 'yes')}>Mark yes</button><button onClick={() => onSetMark(selected.cardId, selected.locationId, 'no')}>Mark no</button><button onClick={() => onSetMark(selected.cardId, selected.locationId, 'unknown')}>Clear</button></div>
-    {stat && <p className="hint">Behavior history: this player held this card in {stat.held}/{stat.suggested} logged suggestions.</p>}
   </section>
 }
 
@@ -942,7 +899,7 @@ function DisproverProbabilities({ game, solver, suggestion, cards }: { game: Gam
       const mark = game.marks[card.id]?.[disproverId] ?? 'unknown'
       const wasShown = suggestion.result.kind === 'shown' && suggestion.result.shownCardId === card.id
       const disproverProbability = solver.probabilities[card.id]?.[disproverId] ?? 0
-      const probabilityLabel = Math.round(disproverProbability * 100) === 0 ? envelopeOddsLabel(game, solver, card.id) : pct(disproverProbability)
+      const probabilityLabel = pct(disproverProbability)
       const label = wasShown ? 'shown' : mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : probabilityLabel
       return <span className={`prob-chip ${wasShown ? 'shown' : ''}`} key={card.id}>
         <span>{card.name}</span>
@@ -958,25 +915,6 @@ function resultText(game: GameState, s: Suggestion) {
   return 'Logged only'
 }
 
-function BehaviorPanel({ game, stats, onFinish }: { game: GameState; stats: BehaviorStats; onFinish: (e: Record<CardType,string>, h: Record<string,string[]>, p: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const [phase, setPhase] = useState<string>('middle')
-  const top = Object.entries(stats).sort((a,b) => (b[1].held / Math.max(1,b[1].suggested)) - (a[1].held / Math.max(1,a[1].suggested))).slice(0, 3)
-  function finishDemo() {
-    const envelope: Record<CardType,string> = { suspect: game.cards.find((c)=>c.type==='suspect')!.id, weapon: game.cards.find((c)=>c.type==='weapon')!.id, room: game.cards.find((c)=>c.type==='room')!.id }
-    const hands: Record<string,string[]> = {}
-    for (const p of game.players) hands[p.id] = game.cards.filter((c) => game.marks[c.id][p.id] === 'yes').map((c) => c.id)
-    onFinish(envelope, hands, phase)
-    setOpen(false)
-  }
-  return <section className="behavior-card">
-    <h2>Behavior hints</h2>
-    <p className="muted">Finished games can teach how often each player suggests cards they hold. This stays separate from exact solver odds because skill and game phase matter.</p>
-    <div className="top-hints">{top.length ? top.map(([key, s]) => <span key={key}>{key.split(':').map((id, i) => i ? cardById(game.cards,id)?.name : playerById(game.players,id)?.name).join(' / ')} to {pct(s.held / Math.max(1, s.suggested))}</span>) : <span>No completed games yet.</span>}</div>
-    <button onClick={() => setOpen(!open)}>Finish game / learn</button>
-    {open && <div className="finish-box"><Select label="Game phase tag" value={phase} onChange={setPhase} options={phaseOptions.map((p) => [p, p])} /><p className="muted">MVP: records suggested-card ownership from known marked hands. A hosted version should save full final hands in a database and model phase, player, and suggestion result.</p><button className="primary wide" onClick={finishDemo}>Store behavior sample</button></div>}
-  </section>
-}
 
 export default App
 
