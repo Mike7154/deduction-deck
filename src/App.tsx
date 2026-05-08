@@ -592,7 +592,7 @@ function GameSummary({ game, onChange, onEditSetup }: { game: GameState; onChang
       </div>)}</div>
       <label className="hand-card-check">
         <input type="checkbox" checked={game.behaviorOptIn} onChange={(event) => onChange({ ...game, behaviorOptIn: event.target.checked })} />
-        <span>Assume players do not guess all 3 cards from their own hand</span>
+        <span>Use behavior heuristics: no all-own-card guesses, and repeated guesses probably were not previously shown</span>
       </label>
       <button className="wide" onClick={onEditSetup}>Edit setup for new game</button>
     </>}

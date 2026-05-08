@@ -13,8 +13,9 @@ export type SolverResult = {
 
 type Clause = { playerId: string; cardIds: string[]; kind: 'atLeastOne' }
 type AntiClause = { playerId: string; cardIds: string[]; kind: 'notAll' }
+type SoftClause = { playerId: string; cardIds: string[]; penalty: number; reason: string }
 type NoFact = { playerId: string; cardIds: string[] }
-type CountResult = { worlds: bigint; counts: bigint[] }
+type CountResult = { worlds: bigint; counts: bigint[]; weightedWorlds: number; weightedCounts: number[] }
 
 
 function orderedPlayers(players: Player[]) {
@@ -59,6 +60,27 @@ function suggestionFacts(players: Player[], suggestions: Suggestion[]) {
   return { noFacts, clauses, antiClauses, yesFacts }
 }
 
+function repeatShownCardSoftClauses(suggestions: Suggestion[]) {
+  const active = suggestions.filter((s) => !s.disabled).sort((a, b) => a.createdAt - b.createdAt)
+  const softClauses: SoftClause[] = []
+  for (const [index, suggestion] of active.entries()) {
+    if (suggestion.result.kind !== 'unknown') continue
+    const laterBySamePlayer = active.slice(index + 1).filter((later) => later.suggesterId === suggestion.suggesterId)
+    const repeated = new Set<string>()
+    for (const later of laterBySamePlayer) for (const cardId of later.cardIds) if (suggestion.cardIds.includes(cardId)) repeated.add(cardId)
+    if (!repeated.size) continue
+    const alternatives = suggestion.cardIds.filter((cardId) => !repeated.has(cardId))
+    if (!alternatives.length) continue
+    softClauses.push({
+      playerId: suggestion.result.disproverId,
+      cardIds: alternatives,
+      penalty: 0.05,
+      reason: 'repeat-shown-card',
+    })
+  }
+  return softClauses
+}
+
 function emptyProbabilities(cards: Card[], locations: LocationId[]) {
   const probs: Record<string, Record<LocationId, number>> = {}
   for (const card of cards) {
@@ -83,6 +105,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const probabilities = emptyProbabilities(game.cards, locations)
   const messages: string[] = []
   const { noFacts, clauses, antiClauses, yesFacts } = suggestionFacts(players, game.suggestions)
+  const softClauses = game.behaviorOptIn ? repeatShownCardSoftClauses(game.suggestions) : []
 
   const hardMarks: GameState['marks'] = structuredClone(game.marks)
   for (const no of noFacts) for (const cardId of no.cardIds) hardMarks[cardId][no.playerId] = hardMarks[cardId][no.playerId] === 'yes' ? 'yes' : 'no'
@@ -90,6 +113,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const clauseCardSets = clauses.map((clause) => new Set(clause.cardIds))
   const behavioralClauses = game.behaviorOptIn ? antiClauses : []
   const behavioralCardSets = behavioralClauses.map((clause) => new Set(clause.cardIds))
+  const softCardSets = softClauses.map((clause) => new Set(clause.cardIds))
   const valueCount = game.cards.length * locations.length
 
   for (const card of game.cards) {
@@ -125,6 +149,11 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
       const forced = forcedLocation(hardMarks[cardId])
       return forced && forced !== clause.playerId
     })) initialBehavioralMask |= 1n << BigInt(clauseIndex)
+  }
+
+  let initialSoftMask = 0n
+  for (const [clauseIndex, clause] of softClauses.entries()) {
+    if (clause.cardIds.some((cardId) => forcedLocation(hardMarks[cardId]) === clause.playerId)) initialSoftMask |= 1n << BigInt(clauseIndex)
   }
 
   function baseAllowedFor(card: Card): LocationId[] {
@@ -167,9 +196,9 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
     })
   }
 
-  const zeroResult = (): CountResult => ({ worlds: 0n, counts: Array<bigint>(valueCount).fill(0n) })
+  const zeroResult = (): CountResult => ({ worlds: 0n, counts: Array<bigint>(valueCount).fill(0n), weightedWorlds: 0, weightedCounts: Array<number>(valueCount).fill(0) })
 
-  function count(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>, mask: bigint, behavioralMask: bigint, memo: Map<string, CountResult>, allowed: (card: Card) => LocationId[]): CountResult {
+  function count(index: number, playerRemaining: number[], envelopeByType: Record<CardType, number>, mask: bigint, behavioralMask: bigint, softMask: bigint, memo: Map<string, CountResult>, allowed: (card: Card) => LocationId[]): CountResult {
     if (!canFinishCounts(index, playerRemaining, envelopeByType, allowed)) return zeroResult()
     if (!possibleClauses(index, mask, allowed)) return zeroResult()
     if (!possibleBehavioralClauses(index, behavioralMask, allowed)) return zeroResult()
@@ -180,10 +209,11 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
       if (behavioralClauses.some((_, clauseIndex) => !(behavioralMask & (1n << BigInt(clauseIndex))))) return zeroResult()
       const base = zeroResult()
       base.worlds = 1n
+      base.weightedWorlds = softClauses.reduce((weight, clause, clauseIndex) => weight * (softMask & (1n << BigInt(clauseIndex)) ? 1 : clause.penalty), 1)
       return base
     }
 
-    const key = `${index}|${playerRemaining.join(',')}|${envelopeByType.suspect},${envelopeByType.weapon},${envelopeByType.room}|${mask}|${behavioralMask}`
+    const key = `${index}|${playerRemaining.join(',')}|${envelopeByType.suspect},${envelopeByType.weapon},${envelopeByType.room}|${mask}|${behavioralMask}|${softMask}`
     const cached = memo.get(key)
     if (cached) return cached
 
@@ -208,26 +238,41 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
         if (loc !== clause.playerId && behavioralCardSets[clauseIndex].has(card.id)) nextBehavioralMask |= 1n << BigInt(clauseIndex)
       }
 
-      const child = count(index + 1, nextPlayers, nextEnvelope, nextMask, nextBehavioralMask, memo, allowed)
+      let nextSoftMask = softMask
+      for (const [clauseIndex, clause] of softClauses.entries()) {
+        if (loc === clause.playerId && softCardSets[clauseIndex].has(card.id)) nextSoftMask |= 1n << BigInt(clauseIndex)
+      }
+
+      const child = count(index + 1, nextPlayers, nextEnvelope, nextMask, nextBehavioralMask, nextSoftMask, memo, allowed)
       if (child.worlds === 0n) continue
       total.worlds += child.worlds
       total.counts[game.cards.indexOf(card) * locations.length + locationIndex[loc]] += child.worlds
       for (let i = 0; i < valueCount; i++) total.counts[i] += child.counts[i]
+      total.weightedWorlds += child.weightedWorlds
+      total.weightedCounts[game.cards.indexOf(card) * locations.length + locationIndex[loc]] += child.weightedWorlds
+      for (let i = 0; i < valueCount; i++) total.weightedCounts[i] += child.weightedCounts[i]
     }
 
     memo.set(key, total)
     return total
   }
 
-  const result = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, new Map(), baseAllowedFor)
+  const result = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, initialSoftMask, new Map(), baseAllowedFor)
 
   if (result.worlds === 0n) return contradiction(game, maxWorlds, 'No valid deals match the current evidence.')
+
+  const useWeightedProbabilities = game.behaviorOptIn && softClauses.length > 0 && result.weightedWorlds > 0
 
   for (const card of game.cards) {
     const forced = forcedLocation(hardMarks[card.id])
     for (const loc of locations) {
       if (forced) probabilities[card.id][loc] = forced === loc ? 1 : 0
-      else probabilities[card.id][loc] = Number(result.counts[game.cards.indexOf(card) * locations.length + locationIndex[loc]]) / Number(result.worlds)
+      else {
+        const valueIndex = game.cards.indexOf(card) * locations.length + locationIndex[loc]
+        probabilities[card.id][loc] = useWeightedProbabilities
+          ? result.weightedCounts[valueIndex] / result.weightedWorlds
+          : Number(result.counts[valueIndex]) / Number(result.worlds)
+      }
     }
   }
 
@@ -242,6 +287,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
   messages.push(`Exact calculation across ${Number(result.worlds).toLocaleString()} valid deals.`)
   if (behavioralClauses.length) messages.push(`Behavior heuristic enabled: excluded deals where a suggester holds all three cards they guessed.`)
+  if (useWeightedProbabilities) messages.push(`Behavior weighting enabled: repeated guesses down-weight the chance that the repeated card was previously shown.`)
 
   const envelopePick = Object.fromEntries((['suspect', 'weapon', 'room'] as CardType[]).map((type) => {
     const cards = game.cards.filter((c) => c.type === type).map((c) => ({ cardId: c.id, probability: probabilities[c.id].envelope })).sort((a, b) => b.probability - a.probability)
@@ -250,8 +296,8 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   let accusationProbability = 0
   if (envelopePick.suspect && envelopePick.weapon && envelopePick.room) {
     const forcedEnvelopeIds = new Set([envelopePick.suspect.cardId, envelopePick.weapon.cardId, envelopePick.room.cardId])
-    const comboWorlds = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, new Map(), comboAllowedFor(forcedEnvelopeIds)).worlds
-    accusationProbability = Number(comboWorlds) / Number(result.worlds)
+    const combo = count(0, remaining, envelopeRemaining, initialClauseMask, initialBehavioralMask, initialSoftMask, new Map(), comboAllowedFor(forcedEnvelopeIds))
+    accusationProbability = useWeightedProbabilities ? combo.weightedWorlds / result.weightedWorlds : Number(combo.worlds) / Number(result.worlds)
   }
 
   return { status: 'exact', worlds: Number(result.worlds), cappedAt: maxWorlds, probabilities, deductions, envelopePick, accusationProbability, messages }
