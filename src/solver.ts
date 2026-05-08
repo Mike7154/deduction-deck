@@ -60,7 +60,8 @@ function suggestionFacts(players: Player[], suggestions: Suggestion[]) {
   return { noFacts, clauses, antiClauses, yesFacts }
 }
 
-function repeatShownCardSoftClauses(suggestions: Suggestion[]) {
+function repeatShownCardSoftClauses(cards: Card[], suggestions: Suggestion[]) {
+  const cardType = Object.fromEntries(cards.map((card) => [card.id, card.type])) as Record<string, CardType>
   const active = suggestions.filter((s) => !s.disabled).sort((a, b) => a.createdAt - b.createdAt)
   const softClauses: SoftClause[] = []
   for (const [index, suggestion] of active.entries()) {
@@ -74,7 +75,7 @@ function repeatShownCardSoftClauses(suggestions: Suggestion[]) {
     softClauses.push({
       playerId: suggestion.result.disproverId,
       cardIds: alternatives,
-      penalty: 0.05,
+      penalty: [...repeated].some((cardId) => cardType[cardId] === 'room') ? 0.15 : 0.05,
       reason: 'repeat-shown-card',
     })
   }
@@ -105,7 +106,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
   const probabilities = emptyProbabilities(game.cards, locations)
   const messages: string[] = []
   const { noFacts, clauses, antiClauses, yesFacts } = suggestionFacts(players, game.suggestions)
-  const softClauses = game.behaviorOptIn ? repeatShownCardSoftClauses(game.suggestions) : []
+  const softClauses = game.behaviorOptIn ? repeatShownCardSoftClauses(game.cards, game.suggestions) : []
 
   const hardMarks: GameState['marks'] = structuredClone(game.marks)
   for (const no of noFacts) for (const cardId of no.cardIds) hardMarks[cardId][no.playerId] = hardMarks[cardId][no.playerId] === 'yes' ? 'yes' : 'no'
@@ -287,7 +288,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
   messages.push(`Exact calculation across ${Number(result.worlds).toLocaleString()} valid deals.`)
   if (behavioralClauses.length) messages.push(`Behavior heuristic enabled: excluded deals where a suggester holds all three cards they guessed.`)
-  if (useWeightedProbabilities) messages.push(`Behavior weighting enabled: repeated guesses down-weight the chance that the repeated card was previously shown.`)
+  if (useWeightedProbabilities) messages.push(`Behavior weighting enabled: repeated guesses down-weight the chance that the repeated card was previously shown; rooms use a softer 15% repeat weight, other cards 5%.`)
 
   const envelopePick = Object.fromEntries((['suspect', 'weapon', 'room'] as CardType[]).map((type) => {
     const cards = game.cards.filter((c) => c.type === type).map((c) => ({ cardId: c.id, probability: probabilities[c.id].envelope })).sort((a, b) => b.probability - a.probability)
