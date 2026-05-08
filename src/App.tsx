@@ -125,16 +125,22 @@ function setSingleMe(players: Player[], id: string) {
   return players.map((player) => ({ ...player, isMe: player.id === id }))
 }
 
-function wasCardShownByMeTo(game: GameState, cardId: string, playerId: string) {
+function playersIShowedCardTo(game: GameState, cardId: string) {
   const meId = mePlayer(game.players)?.id
-  if (!meId || playerId === meId) return false
-  return game.suggestions.some((suggestion) =>
-    !suggestion.disabled &&
-    suggestion.suggesterId === playerId &&
-    suggestion.result.kind === 'shown' &&
-    suggestion.result.disproverId === meId &&
-    suggestion.result.shownCardId === cardId
-  )
+  if (!meId) return []
+  const ids = new Set(game.suggestions
+    .filter((suggestion) =>
+      !suggestion.disabled &&
+      suggestion.result.kind === 'shown' &&
+      suggestion.result.disproverId === meId &&
+      suggestion.result.shownCardId === cardId
+    )
+    .map((suggestion) => suggestion.suggesterId))
+  return orderedPlayers(game.players).filter((player) => ids.has(player.id))
+}
+
+function wasCardShownByMeTo(game: GameState, cardId: string, playerId: string) {
+  return playersIShowedCardTo(game, cardId).some((player) => player.id === playerId)
 }
 
 function distributeCardCounts(players: Player[], cardTotal: number) {
@@ -762,9 +768,10 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
           const mark = game.marks[card.id][loc]
           const prob = solver.probabilities[card.id]?.[loc] ?? 0
           const isSelected = selected?.cardId === card.id && selected?.locationId === loc
-          const shownByMe = loc !== 'envelope' && wasCardShownByMeTo(game, card.id, loc)
+          const player = loc === 'envelope' ? null : playerById(game.players, loc)
+          const shownByMe = Boolean(player && !player.isMe && wasCardShownByMeTo(game, card.id, player.id))
           const label = mark === 'yes' ? 'YES' : shownByMe ? 'shown' : mark === 'no' ? 'no' : pct(prob)
-          return <td key={loc} className={`prob-cell ${shownByMe ? 'shown-to-player' : ''} ${loc === 'envelope' ? 'envelope-col' : ''} ${playerById(game.players, loc)?.isMe ? 'me-col' : ''} ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} title={shownByMe ? `You showed ${card.name} to ${playerById(game.players, loc)?.name}` : undefined} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
+          return <td key={loc} className={`prob-cell ${shownByMe ? 'shown-to-player' : ''} ${loc === 'envelope' ? 'envelope-col' : ''} ${player?.isMe ? 'me-col' : ''} ${loc === 'envelope' && envelopeOut ? 'envelope-out' : ''} ${isSelected ? 'selected' : ''} mark-${mark}`} title={shownByMe ? `You showed ${card.name} to ${player?.name}` : undefined} onClick={() => onSelect({ cardId: card.id, locationId: loc })} onDoubleClick={() => onSetMark(card.id, loc, nextMark(mark))} style={{ '--p': prob } as React.CSSProperties}>
             {label}
           </td>
         })}
