@@ -72,11 +72,13 @@ function repeatShownCardSoftClauses(cards: Card[], suggestions: Suggestion[]) {
     if (!repeated.size) continue
     const alternatives = suggestion.cardIds.filter((cardId) => !repeated.has(cardId))
     if (!alternatives.length) continue
+    const repeatsRoom = [...repeated].some((cardId) => cardType[cardId] === 'room')
+    const repeatedPair = repeated.size >= 2
     softClauses.push({
       playerId: suggestion.result.disproverId,
       cardIds: alternatives,
-      penalty: [...repeated].some((cardId) => cardType[cardId] === 'room') ? 0.15 : 0.05,
-      reason: 'repeat-shown-card',
+      penalty: repeatedPair ? (repeatsRoom ? 0.08 : 0.02) : (repeatsRoom ? 0.15 : 0.05),
+      reason: repeatedPair ? 'repeat-two-shown-cards' : 'repeat-shown-card',
     })
   }
   return softClauses
@@ -288,7 +290,7 @@ export function solveGame(game: GameState, maxWorlds = 250_000): SolverResult {
 
   messages.push(`Exact calculation across ${Number(result.worlds).toLocaleString()} valid deals.`)
   if (behavioralClauses.length) messages.push(`Behavior heuristic enabled: excluded deals where a suggester holds all three cards they guessed.`)
-  if (useWeightedProbabilities) messages.push(`Behavior weighting enabled: repeated guesses down-weight the chance that the repeated card was previously shown; rooms use a softer 15% repeat weight, other cards 5%.`)
+  if (useWeightedProbabilities) messages.push(`Behavior weighting enabled: repeated guesses down-weight the chance that repeated cards were previously shown; single repeats use 15% for rooms and 5% otherwise, repeated pairs use 8% with rooms and 2% otherwise.`)
 
   const envelopePick = Object.fromEntries((['suspect', 'weapon', 'room'] as CardType[]).map((type) => {
     const cards = game.cards.filter((c) => c.type === type).map((c) => ({ cardId: c.id, probability: probabilities[c.id].envelope })).sort((a, b) => b.probability - a.probability)
