@@ -50,6 +50,11 @@ function envelopeOddsLabel(game: GameState, solver: SolverResult, cardId: string
 const cardById = (cards: Card[], id: string) => cards.find((c) => c.id === id)
 const playerById = (players: Player[], id: string) => players.find((p) => p.id === id)
 const orderedPlayers = (players: Player[]) => [...players].sort((a, b) => a.turnOrder - b.turnOrder)
+function matrixPlayers(players: Player[]) {
+  const ordered = orderedPlayers(players)
+  const meIndex = ordered.findIndex((player) => player.isMe)
+  return meIndex < 0 ? ordered : [...ordered.slice(meIndex), ...ordered.slice(0, meIndex)]
+}
 
 function nextMark(mark: Mark): Mark {
   return mark === 'unknown' ? 'no' : mark === 'no' ? 'yes' : 'unknown'
@@ -254,7 +259,7 @@ function App() {
   const [undoStack, setUndoStack] = useState<GameState[]>([])
   const [theme, setTheme] = useState<ThemeMode>(loadTheme)
   const solver = useMemo(() => setupMode ? null : solveGame(game), [game, setupMode])
-  const locations = useMemo(() => ['envelope', ...orderedPlayers(game.players).map((p) => p.id)], [game.players])
+  const locations = useMemo(() => ['envelope', ...matrixPlayers(game.players).map((p) => p.id)], [game.players])
   const likelyBadSuggestionIds = useMemo(() => {
     if (setupMode || solver?.status !== 'contradiction') return new Set<string>()
     const helpfulIds = game.suggestions
