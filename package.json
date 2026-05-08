@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "simulate": "node --experimental-strip-types scripts/run-simulation.ts",
+    "analyze": "node --experimental-strip-types scripts/analyze-simulation.ts"
   },
   "dependencies": {
     "react": "^19.2.5",

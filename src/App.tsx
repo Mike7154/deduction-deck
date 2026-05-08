@@ -5,45 +5,16 @@ import { solveGame, type SolverResult } from './solver'
 
 const saveKey = 'deduction-deck-game-v1'
 const statsKey = 'deduction-deck-behavior-stats-v1'
-const usersKey = 'deduction-deck-users-v1'
-const sessionKey = 'deduction-deck-current-user-v1'
 const themeKey = 'deduction-deck-theme-v1'
 const phaseOptions = ['opening', 'middle', 'endgame'] as const
 
 type MatrixMode = 'probabilities' | 'guesses'
-type AuthMode = 'login' | 'signup'
 type ThemeMode = 'dark' | 'light'
-type UserAccount = { email: string; createdAt: number }
+const defaultProfileId = 'local-guest'
+const legacySessionKey = 'deduction-deck-current-user-v1'
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase()
-}
-
-function isValidEmail(email: string) {
-  return emailPattern.test(normalizeEmail(email))
-}
-
-function userScopedKey(baseKey: string, email: string) {
-  return `${baseKey}:${encodeURIComponent(normalizeEmail(email))}`
-}
-
-function loadUsers(): UserAccount[] {
-  try {
-    return JSON.parse(localStorage.getItem(usersKey) ?? '[]') as UserAccount[]
-  } catch {
-    return []
-  }
-}
-
-function saveUsers(users: UserAccount[]) {
-  localStorage.setItem(usersKey, JSON.stringify(users))
-}
-
-function loadSession() {
-  const email = normalizeEmail(localStorage.getItem(sessionKey) ?? '')
-  return email && loadUsers().some((u) => u.email === email) ? email : null
+function userScopedKey(baseKey: string, profileId = defaultProfileId) {
+  return `${baseKey}:${encodeURIComponent(profileId)}`
 }
 
 function hydrateGame(game: GameState): GameState {
@@ -53,19 +24,30 @@ function hydrateGame(game: GameState): GameState {
   }
 }
 
-function loadGame(email: string): GameState {
+function loadLegacyProfileId() {
+  return localStorage.getItem(legacySessionKey)?.trim().toLowerCase() || null
+}
+
+function loadGame(profileId: string): GameState {
   try {
-    const scopedKey = userScopedKey(saveKey, email)
-    const raw = localStorage.getItem(scopedKey)
+    const raw = localStorage.getItem(userScopedKey(saveKey, profileId))
     if (raw) return hydrateGame(JSON.parse(raw) as GameState)
+
+    const legacyProfileId = loadLegacyProfileId()
+    const legacyRaw = legacyProfileId ? localStorage.getItem(userScopedKey(saveKey, legacyProfileId)) : null
+    if (legacyRaw) return hydrateGame(JSON.parse(legacyRaw) as GameState)
   } catch { /* noop */ }
   return createDefaultGame()
 }
 
-function loadStats(email: string): BehaviorStats {
+function loadStats(profileId: string): BehaviorStats {
   try {
-    const scopedKey = userScopedKey(statsKey, email)
-    return JSON.parse(localStorage.getItem(scopedKey) ?? '{}') as BehaviorStats
+    const raw = localStorage.getItem(userScopedKey(statsKey, profileId))
+    if (raw) return JSON.parse(raw) as BehaviorStats
+
+    const legacyProfileId = loadLegacyProfileId()
+    const legacyRaw = legacyProfileId ? localStorage.getItem(userScopedKey(statsKey, legacyProfileId)) : null
+    return JSON.parse(legacyRaw ?? '{}') as BehaviorStats
   } catch {
     return {}
   }
@@ -249,9 +231,9 @@ function withSuggestionDisabledForTest(game: GameState, suggestionId: string): G
 }
 
 function App() {
-  const [userEmail, setUserEmail] = useState<string | null>(loadSession)
-  const [game, setGame] = useState<GameState>(() => userEmail ? loadGame(userEmail) : createDefaultGame())
-  const [stats, setStats] = useState<BehaviorStats>(() => userEmail ? loadStats(userEmail) : {})
+  const [profileId] = useState(defaultProfileId)
+  const [game, setGame] = useState<GameState>(() => loadGame(profileId))
+  const [stats, setStats] = useState<BehaviorStats>(() => loadStats(profileId))
   const [selected, setSelected] = useState<{ cardId: string; locationId: LocationId } | null>(null)
   const [matrixMode, setMatrixMode] = useState<MatrixMode>('probabilities')
   const [detailCardId, setDetailCardId] = useState<string | null>(null)
@@ -272,54 +254,39 @@ function App() {
     return new Set(helpfulIds)
   }, [game, setupMode, solver?.status])
 
-  function activateUser(email: string) {
-    const normalized = normalizeEmail(email)
-    localStorage.setItem(sessionKey, normalized)
-    setUserEmail(normalized)
-    setGame(loadGame(normalized))
-    setStats(loadStats(normalized))
+  function resetLocalGame() {
+    setGame(loadGame(profileId))
+    setStats(loadStats(profileId))
     setSelected(null)
     setQuickMark(null)
     setMatrixMode('probabilities')
     setDetailCardId(null)
     setSetupMode(false)
-    setSetupDraft(createDefaultGame())
-  }
-
-  function logout() {
-    localStorage.removeItem(sessionKey)
-    setUserEmail(null)
-    setSelected(null)
-    setQuickMark(null)
-    setDetailCardId(null)
-    setSetupMode(false)
   }
 
   function updateGame(next: GameState) {
-    if (!userEmail) return
     const hydrated = hydrateGame(next)
     setUndoStack((stack) => [game, ...stack].slice(0, 25))
     setGame(hydrated)
-    localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(hydrated))
+    localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(hydrated))
   }
 
   function replaceGame(next: GameState) {
-    if (!userEmail) return
     const hydrated = hydrateGame(next)
     setUndoStack([])
     setGame(hydrated)
-    localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(hydrated))
+    localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(hydrated))
   }
 
   function undoLastChange() {
     const [previous, ...rest] = undoStack
-    if (!previous || !userEmail) return
+    if (!previous) return
     setUndoStack(rest)
     setGame(previous)
     setSelected(null)
     setQuickMark(null)
     setDetailCardId(null)
-    localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(previous))
+    localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(previous))
   }
 
   function setMark(cardId: string, locationId: LocationId, mark: Mark) {
@@ -375,7 +342,6 @@ function App() {
   }
 
   function finishGame(envelope: Record<CardType, string>, playerHands: Record<string, string[]>, phase: string) {
-    if (!userEmail) return
     const nextStats = structuredClone(stats)
     for (const suggestion of game.suggestions) {
       if (suggestion.disabled) continue
@@ -394,7 +360,7 @@ function App() {
     const nextGame = structuredClone(game)
     for (const type of Object.keys(envelope) as CardType[]) if (envelope[type]) nextGame.marks[envelope[type]].envelope = 'yes'
     setStats(nextStats)
-    localStorage.setItem(userScopedKey(statsKey, userEmail), JSON.stringify(nextStats))
+    localStorage.setItem(userScopedKey(statsKey, profileId), JSON.stringify(nextStats))
     updateGame(nextGame)
   }
 
@@ -412,13 +378,12 @@ function App() {
   const quickMarkCard = quickMark ? cardById(game.cards, quickMark.cardId) : null
   const quickMarkLocation = quickMark?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, quickMark?.locationId ?? '')?.name
 
-  if (!userEmail) return <AuthScreen onAuthenticated={activateUser} />
-  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { replaceGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setQuickMark(null); setDetailCardId(null); setMatrixMode('probabilities') }} onLogout={logout} />
+  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { replaceGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setQuickMark(null); setDetailCardId(null); setMatrixMode('probabilities') }} />
   if (!solver) return null
 
   return (
     <div className="app-shell" data-theme={theme}>
-      <TopBar game={game} userEmail={userEmail} theme={theme} onToggleTheme={toggleTheme} canUndo={undoStack.length > 0} onUndo={undoLastChange} onLogout={logout} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, userEmail), JSON.stringify(game))} />
+      <TopBar game={game} theme={theme} onToggleTheme={toggleTheme} canUndo={undoStack.length > 0} onUndo={undoLastChange} onResetLocal={resetLocalGame} onNew={() => { setSetupDraft(createDefaultGame()); setSetupMode(true); setDetailCardId(null) }} onSave={() => localStorage.setItem(userScopedKey(saveKey, profileId), JSON.stringify(game))} />
       <main className="workspace">
         <aside className="sidebar panel">
           <GameSummary game={game} onChange={updateGame} onEditSetup={() => { setSetupDraft(resetKnownEvidence(game)); setSetupMode(true); setDetailCardId(null) }} />
@@ -454,49 +419,7 @@ function App() {
   )
 }
 
-function AuthScreen({ onAuthenticated }: { onAuthenticated: (email: string) => void }) {
-  const [mode, setMode] = useState<AuthMode>('login')
-  const [email, setEmail] = useState('')
-  const [error, setError] = useState('')
-
-  function submit() {
-    const normalized = normalizeEmail(email)
-    if (!isValidEmail(normalized)) {
-      setError('Enter a valid email address.')
-      return
-    }
-
-    const users = loadUsers()
-    const exists = users.some((u) => u.email === normalized)
-    if (mode === 'signup') {
-      if (exists) {
-        setError('That email already has an account. Log in instead.')
-        return
-      }
-      saveUsers([...users, { email: normalized, createdAt: Date.now() }])
-      onAuthenticated(normalized)
-      return
-    }
-
-    if (!exists) saveUsers([...users, { email: normalized, createdAt: Date.now() }])
-    onAuthenticated(normalized)
-  }
-
-  return <div className="auth-shell">
-    <section className="auth-card panel">
-      <div className="brand auth-brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>Private local game spaces</small></div></div>
-      <h1>{mode === 'login' ? 'Log in' : 'Sign up'}</h1>
-      <p className="muted">Use a valid email to keep each player's game board and behavior hints separate on this device.</p>
-      <label className="field"><span>Email</span><input type="email" autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} onKeyDown={(e) => { if (e.key === 'Enter') submit() }} placeholder="you@example.com" /></label>
-      {error && <p className="auth-error">{error}</p>}
-      <button className="primary wide" onClick={submit}>{mode === 'login' ? 'Log in' : 'Create account'}</button>
-      <button className="link-button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError('') }}>{mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}</button>
-      <p className="local-note">Accounts are local to this browser. If the account list is missing after an update, logging in with the same email will relink that local save.</p>
-    </section>
-  </div>
-}
-
-function TopBar({ game, userEmail, theme, onToggleTheme, canUndo, onUndo, onLogout, onNew, onSave }: { game: GameState; userEmail: string; theme: ThemeMode; onToggleTheme: () => void; canUndo: boolean; onUndo: () => void; onLogout: () => void; onNew: () => void; onSave: () => void }) {
+function TopBar({ game, theme, onToggleTheme, canUndo, onUndo, onResetLocal, onNew, onSave }: { game: GameState; theme: ThemeMode; onToggleTheme: () => void; canUndo: boolean; onUndo: () => void; onResetLocal: () => void; onNew: () => void; onSave: () => void }) {
   function exportJson() {
     const blob = new Blob([JSON.stringify(game, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -505,12 +428,12 @@ function TopBar({ game, userEmail, theme, onToggleTheme, canUndo, onUndo, onLogo
     a.click()
   }
   return <header className="topbar">
-    <div className="brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>{userEmail}</small></div></div>
-    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onToggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onLogout}>Log out</button></nav>
+    <div className="brand"><span className="brand-mark">DD</span><div><strong>Deduction Deck</strong><small>Saved in this browser</small></div></div>
+    <nav><button className="undo-button" onClick={onUndo} disabled={!canUndo}>Undo</button><button onClick={onToggleTheme}>{theme === 'dark' ? 'Light' : 'Dark'}</button><button onClick={onNew}>New Game</button><button onClick={onSave}>Save</button><button onClick={exportJson}>Export</button><button onClick={onResetLocal}>Reload save</button></nav>
   </header>
 }
 
-function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: GameState; onChange: (g: GameState) => void; onCancel: () => void; onStart: (g: GameState) => void; onLogout: () => void }) {
+function SetupScreen({ draft, onChange, onCancel, onStart }: { draft: GameState; onChange: (g: GameState) => void; onCancel: () => void; onStart: (g: GameState) => void }) {
   const errors = setupErrors(draft)
   const dealtCards = Math.max(0, draft.cards.length - 3)
 
@@ -601,7 +524,7 @@ function SetupScreen({ draft, onChange, onCancel, onStart, onLogout }: { draft: 
   return <div className="app-shell setup-shell">
     <header className="topbar">
       <div className="brand"><span className="brand-mark">DD</span><div><strong>New game setup</strong><small>No solver runs until you start</small></div></div>
-      <nav><button onClick={onCancel}>Cancel</button><button onClick={onLogout}>Log out</button></nav>
+      <nav><button onClick={onCancel}>Cancel</button></nav>
     </header>
     <main className="setup-workspace">
       <section className="panel setup-editor">
@@ -753,12 +676,12 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
     <div className="suggestion-title"><h2>Current suggestion</h2><button className="tiny" onClick={onSkip}>Skip suggester</button></div>
     <div className="current-turn-box"><span>Now asking</span><strong>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''}</strong><button className="tiny popout-button" onClick={openQuickPlay}>Pop out</button></div>
     <div className="form-grid">
-      <CardSelect label="Suspect" type="suspect" game={game} value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
-      <CardSelect label="Weapon" type="weapon" game={game} value={weapon} onChange={setWeapon} />
-      <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
+      <CardSelect label="Suspect" type="suspect" game={game} solver={solver} showEnvelopeOdds value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
+      <CardSelect label="Weapon" type="weapon" game={game} solver={solver} showEnvelopeOdds value={weapon} onChange={setWeapon} />
+      <CardSelect label="Room" type="room" game={game} solver={solver} showEnvelopeOdds value={room} onChange={setRoom} />
       <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
       {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, card.name])} />}
+      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, `${card.name} ? ${pct(solver.probabilities[card.id]?.envelope ?? 0)}`])} />}
     </div>
     {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
     <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
@@ -768,9 +691,9 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
       <section className="quick-suggestion-modal panel" onClick={(event) => event.stopPropagation()}>
         <div className="modal-head"><div><h1>Log suggestion</h1><p>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''} is asking.</p></div><button onClick={() => setQuickOpen(false)}>Close</button></div>
         <div className="form-grid quick-card-grid">
-          <CardSelect label="Suspect" type="suspect" game={game} value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
-          <CardSelect label="Weapon" type="weapon" game={game} value={weapon} onChange={setWeapon} />
-          <CardSelect label="Room" type="room" game={game} value={room} onChange={setRoom} />
+          <CardSelect label="Suspect" type="suspect" game={game} solver={solver} showEnvelopeOdds value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
+          <CardSelect label="Weapon" type="weapon" game={game} solver={solver} showEnvelopeOdds value={weapon} onChange={setWeapon} />
+          <CardSelect label="Room" type="room" game={game} solver={solver} showEnvelopeOdds value={room} onChange={setRoom} />
         </div>
         {currentResponder ? <div className="responder-step">
           <span>Next player</span>
@@ -790,8 +713,8 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[][] }) {
   return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
 }
-function CardSelect({ label, type, game, value, onChange }: { label: string; type: CardType; game: GameState; value: string; onChange: (v: string) => void }) {
-  return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, c.name])} />
+function CardSelect({ label, type, game, value, onChange, solver, showEnvelopeOdds = false }: { label: string; type: CardType; game: GameState; value: string; onChange: (v: string) => void; solver?: SolverResult; showEnvelopeOdds?: boolean }) {
+  return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, showEnvelopeOdds && solver ? `${c.name} ? ${pct(solver.probabilities[c.id]?.envelope ?? 0)}` : c.name])} />
 }
 
 function envelopeLabel(game: GameState, solver: SolverResult, type: CardType) {
