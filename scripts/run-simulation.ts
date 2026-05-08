@@ -46,6 +46,11 @@ function runOne(myPosition: number | 'random') {
     envelopeWeight: Number(args.get('envelopeWeight') ?? 0.15),
     decisiveNobodyWeight: Number(args.get('decisiveNobodyWeight') ?? 1.1),
     lateLeakageDiscount: Number(args.get('lateLeakageDiscount') ?? 0.35),
+    targetPasses: Number(args.get('targetPasses') ?? 1.5),
+    targetPassWeight: Number(args.get('targetPassWeight') ?? 0),
+    suspectWeight: Number(args.get('suspectWeight') ?? 1),
+    weaponWeight: Number(args.get('weaponWeight') ?? 1),
+    roomWeight: Number(args.get('roomWeight') ?? 1),
     onTrial: writeTrial,
     onProgress: quiet ? undefined : (p) => {
       const now = Date.now()

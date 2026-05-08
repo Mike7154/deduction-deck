@@ -3,7 +3,7 @@ import { solveGame, type SolverResult } from './solver.ts'
 import { createBlankMarks, defaultCards, defaultPlayers, type CardType, type GameState, type Player, type Suggestion, type SuggestionResult } from './types.ts'
 
 export type SimulationStrategy = 'likely' | 'balanced' | 'infoGain' | 'hybrid' | 'random' | 'passNext' | 'targetNext' | 'passMany' | 'privateInfo' | 'tableControl' | 'weightedInfo' | 'weightedPrivate' | 'phaseHybrid' | 'decisiveProbe'
-export type SimulationOptions = { games?: number; seed?: number; maxTurns?: number; solverMaxWorlds?: number; candidateLimitPerType?: number; accusationThreshold?: number; paired?: boolean; playerCount?: 3 | 6; myPosition?: number | 'random'; infoWeight?: number; bottleneckWeight?: number; exactWeight?: number; selfProbeWeight?: number; leakageWeight?: number; envelopeWeight?: number; decisiveNobodyWeight?: number; lateLeakageDiscount?: number; onProgress?: (progress: SimulationProgress) => void; onTrial?: (trial: TrialResult) => void }
+export type SimulationOptions = { games?: number; seed?: number; maxTurns?: number; solverMaxWorlds?: number; candidateLimitPerType?: number; accusationThreshold?: number; paired?: boolean; playerCount?: 3 | 6; myPosition?: number | 'random'; infoWeight?: number; bottleneckWeight?: number; exactWeight?: number; selfProbeWeight?: number; leakageWeight?: number; envelopeWeight?: number; decisiveNobodyWeight?: number; lateLeakageDiscount?: number; targetPasses?: number; targetPassWeight?: number; suspectWeight?: number; weaponWeight?: number; roomWeight?: number; onProgress?: (progress: SimulationProgress) => void; onTrial?: (trial: TrialResult) => void }
 export type SimulationProgress = { strategy: SimulationStrategy; strategyIndex: number; strategyCount: number; game: number; games: number; completed: number; total: number; elapsedMs: number; estimatedTotalMs: number; remainingMs: number }
 export type StrategySummary = { strategy: SimulationStrategy; games: number; solved: number; failed: number; averagePlayerTurns: number; stdDevTurns: number; ci95Turns: number; medianPlayerTurns: number; iqrPlayerTurns: number; p75PlayerTurns: number; p95PlayerTurns: number; averageMyTurns: number; averageSolverWorlds: number; averagePassesOnMySuggestions: number; immediateDisproofRate: number; nobodyDisprovedRate: number; exactShownToMePerGame: number; avgNoFactsPerMySuggestion: number; avgEntropyImbalance: number; avgSuspectSolvedTurn: number; avgWeaponSolvedTurn: number; avgRoomSolvedTurn: number; meanRank?: number }
 
@@ -35,7 +35,7 @@ type Deal = { envelope: Record<CardType, string>; hands: Record<string, Set<stri
 type GameMetrics = { mySuggestions: number; passCount: number; immediateDisproofs: number; nobodyDisproved: number; exactShownToMe: number; entropyImbalanceTotal: number; categorySolvedTurns: Partial<Record<CardType, number>> }
 
 const types: CardType[] = ['suspect', 'weapon', 'room']
-const defaults = { games: 100, seed: 7154, maxTurns: 240, solverMaxWorlds: 250_000, candidateLimitPerType: 3, accusationThreshold: 0.88, infoWeight: 1, bottleneckWeight: 0.08, exactWeight: 0.35, selfProbeWeight: 0.35, leakageWeight: 0.25, envelopeWeight: 0.15, decisiveNobodyWeight: 1.1, lateLeakageDiscount: 0.35, paired: true, playerCount: 6 as 3 | 6, myPosition: 0 as number | 'random' }
+const defaults = { games: 100, seed: 7154, maxTurns: 240, solverMaxWorlds: 250_000, candidateLimitPerType: 3, accusationThreshold: 0.88, infoWeight: 1, bottleneckWeight: 0.08, exactWeight: 0.35, selfProbeWeight: 0.35, leakageWeight: 0.25, envelopeWeight: 0.15, decisiveNobodyWeight: 1.1, lateLeakageDiscount: 0.35, targetPasses: 1.5, targetPassWeight: 0, suspectWeight: 1, weaponWeight: 1, roomWeight: 1, paired: true, playerCount: 6 as 3 | 6, myPosition: 0 as number | 'random' }
 type ResolvedSimulationOptions = Required<Omit<SimulationOptions, 'onProgress' | 'onTrial'>> & { onProgress?: (progress: SimulationProgress) => void; onTrial?: (trial: TrialResult) => void }
 const cardsByType = (type: CardType) => defaultCards.filter((card) => card.type === type)
 const ordered = (players: Player[]) => [...players].sort((a, b) => a.turnOrder - b.turnOrder)
@@ -116,6 +116,7 @@ function solved(solver: SolverResult, d: Deal) { return solver.status === 'exact
 function candidates(type: CardType, game: GameState, solver: SolverResult) { return cardsByType(type).filter((card) => game.marks[card.id].envelope !== 'no' && (solver.probabilities[card.id]?.envelope ?? 0) > 0).sort((a, b) => (solver.probabilities[b.id]?.envelope ?? 0) - (solver.probabilities[a.id]?.envelope ?? 0)) }
 function categoryEntropy(type: CardType, solver: SolverResult) { return -cardsByType(type).reduce((sum, card) => { const p = solver.probabilities[card.id]?.envelope ?? 0; return sum + (p > 0 ? p * Math.log2(p) : 0) }, 0) }
 function entropyImbalance(solver: SolverResult) { const values = types.map((type) => categoryEntropy(type, solver)); return Math.max(...values) - Math.min(...values) }
+function typeWeight(type: CardType, options: ResolvedSimulationOptions) { return type === 'suspect' ? options.suspectWeight : type === 'weapon' ? options.weaponWeight : options.roomWeight }
 function likely(solver: SolverResult): [string, string, string] { return types.map((type) => solver.envelopePick[type]?.cardId ?? cardsByType(type)[0].id) as [string, string, string] }
 function randomPick(game: GameState, solver: SolverResult, r: Rng): [string, string, string] { return types.map((type) => pick(candidates(type, game, solver).length ? candidates(type, game, solver) : cardsByType(type), r).id) as [string, string, string] }
 function balanced(game: GameState, solver: SolverResult, r: Rng): [string, string, string] {
@@ -245,7 +246,7 @@ function lateGameFactor(solver: SolverResult) {
   return Math.max(entropyFactor, solver.accusationProbability)
 }
 
-function decisiveNobodyValue(game: GameState, solver: SolverResult, cardIds: [string, string, string]) {
+function decisiveNobodyValue(game: GameState, solver: SolverResult, options: ResolvedSimulationOptions, cardIds: [string, string, string]) {
   const myId = me(game.players).id
   const late = lateGameFactor(solver)
   const selfAnchors = cardIds.filter((cardId) => game.marks[cardId][myId] === 'yes').length
@@ -255,7 +256,7 @@ function decisiveNobodyValue(game: GameState, solver: SolverResult, cardIds: [st
     const candidateCount = candidates(card.type, game, solver).length
     const envelopeP = solver.probabilities[cardId]?.envelope ?? 0
     const bottleneckSolvedByNoOne = candidateCount <= 3 ? (4 - candidateCount) * 0.35 : 0
-    return envelopeP + bottleneckSolvedByNoOne
+    return typeWeight(card.type, options) * (envelopeP + bottleneckSolvedByNoOne)
   })
   const unknownPressure = categoryValues.reduce((sum, value) => sum + value, 0)
   return late * (unknownPressure + selfAnchors * 0.45) * Math.min(1, 0.25 + late)
@@ -266,16 +267,17 @@ function weightedScore(game: GameState, solver: SolverResult, options: ResolvedS
   const myId = me(game.players).id
   const bottleneckPressure = cardIds.reduce((sum, cardId) => {
     const card = defaultCards.find((c) => c.id === cardId)
-    return sum + (card ? candidates(card.type, game, solver).length * categoryEntropy(card.type, solver) : 0)
+    return sum + (card ? typeWeight(card.type, options) * candidates(card.type, game, solver).length * categoryEntropy(card.type, solver) : 0)
   }, 0)
-  const selfProbe = cardIds.filter((cardId) => game.marks[cardId][myId] === 'yes').length
-  const envelopePressure = cardIds.reduce((sum, cardId) => sum + (solver.probabilities[cardId]?.envelope ?? 0), 0)
+  const selfProbe = cardIds.reduce((sum, cardId) => { const card = defaultCards.find((c) => c.id === cardId); return sum + (game.marks[cardId][myId] === 'yes' ? typeWeight(card?.type ?? 'suspect', options) : 0) }, 0)
+  const envelopePressure = cardIds.reduce((sum, cardId) => { const card = defaultCards.find((c) => c.id === cardId); return sum + typeWeight(card?.type ?? 'suspect', options) * (solver.probabilities[cardId]?.envelope ?? 0) }, 0)
   const infoValue = profile.exactShownEntropy + profile.nobodyProbability * 0.65 + profile.expectedPasses * 0.18
   const exactValue = profile.immediateDisproofProbability + profile.exactShownEntropy
   const late = lateGameFactor(solver)
   const leakage = profile.expectedPasses + profile.nobodyProbability * 1.4
   const lateAdjustedLeakage = leakage * (1 - late * options.lateLeakageDiscount)
-  const decisiveValue = profile.nobodyProbability * decisiveNobodyValue(game, solver, cardIds)
+  const decisiveValue = profile.nobodyProbability * decisiveNobodyValue(game, solver, options, cardIds)
+  const targetPassPenalty = Math.abs(profile.expectedPasses - options.targetPasses)
   return options.infoWeight * infoValue
     + options.bottleneckWeight * bottleneckPressure
     + options.exactWeight * exactValue
@@ -283,6 +285,7 @@ function weightedScore(game: GameState, solver: SolverResult, options: ResolvedS
     + options.envelopeWeight * envelopePressure
     + options.decisiveNobodyWeight * decisiveValue
     - options.leakageWeight * privacyBias * lateAdjustedLeakage
+    - options.targetPassWeight * targetPassPenalty
 }
 
 function weightedInfo(game: GameState, solver: SolverResult, options: ResolvedSimulationOptions) {
@@ -296,7 +299,7 @@ function weightedPrivate(game: GameState, solver: SolverResult, options: Resolve
 
 function decisiveProbe(game: GameState, solver: SolverResult, options: ResolvedSimulationOptions) {
   return optimizeByProfile(game, solver, options, (profile, cardIds) => {
-    const decisiveValue = profile.nobodyProbability * decisiveNobodyValue(game, solver, cardIds)
+    const decisiveValue = profile.nobodyProbability * decisiveNobodyValue(game, solver, options, cardIds)
     const exactFallback = profile.immediateDisproofProbability * 0.2 + profile.exactShownEntropy * 0.25
     const envelopePressure = cardIds.reduce((sum, cardId) => sum + (solver.probabilities[cardId]?.envelope ?? 0), 0)
     return decisiveValue * 2.2 + exactFallback + envelopePressure * 0.2
@@ -499,7 +502,7 @@ export function formatSimulationReport(report: SimulationReport) {
   return [
     `Simulated ${report.options.games} games per strategy`,
     `Design: ${report.options.paired ? 'paired/blocked' : 'unpaired'}; Players: ${report.options.playerCount}; Me position: ${report.options.myPosition}; Max turns: ${report.options.maxTurns}; solver maxWorlds argument: ${report.options.solverMaxWorlds.toLocaleString()}`,
-    `Weights: info=${report.options.infoWeight}, bottleneck=${report.options.bottleneckWeight}, exact=${report.options.exactWeight}, self=${report.options.selfProbeWeight}, leakage=${report.options.leakageWeight}, envelope=${report.options.envelopeWeight}, decisiveNobody=${report.options.decisiveNobodyWeight}, lateLeakageDiscount=${report.options.lateLeakageDiscount}`,
+    `Weights: info=${report.options.infoWeight}, bottleneck=${report.options.bottleneckWeight}, exact=${report.options.exactWeight}, self=${report.options.selfProbeWeight}, leakage=${report.options.leakageWeight}, envelope=${report.options.envelopeWeight}, decisiveNobody=${report.options.decisiveNobodyWeight}, lateLeakageDiscount=${report.options.lateLeakageDiscount}, targetPasses=${report.options.targetPasses}, targetPassWeight=${report.options.targetPassWeight}, suspect=${report.options.suspectWeight}, weapon=${report.options.weaponWeight}, room=${report.options.roomWeight}`,
     '',
     '| Strategy | Solved | Avg turns | StdDev | 95% CI | Median | IQR | P95 | Mean rank | Avg my | Passes | No facts | Immediate | Nobody | Exact/game | Ent imbalance | S/W/R solved | Avg worlds |',
     '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',

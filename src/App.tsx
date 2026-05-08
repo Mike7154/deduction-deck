@@ -54,6 +54,13 @@ function loadStats(profileId: string): BehaviorStats {
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`
+function envelopeOddsLabel(game: GameState, solver: SolverResult, cardId: string) {
+  const probability = solver.probabilities[cardId]?.envelope ?? 0
+  const rounded = Math.round(probability * 100)
+  if (rounded !== 0) return `${rounded}%`
+  const holder = orderedPlayers(game.players).find((player) => game.marks[cardId]?.[player.id] === 'yes' || solver.probabilities[cardId]?.[player.id] === 1)
+  return holder ? `0% (${holder.name})` : '0%'
+}
 const cardById = (cards: Card[], id: string) => cards.find((c) => c.id === id)
 const playerById = (players: Player[], id: string) => players.find((p) => p.id === id)
 const orderedPlayers = (players: Player[]) => [...players].sort((a, b) => a.turnOrder - b.turnOrder)
@@ -681,7 +688,7 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
       <CardSelect label="Room" type="room" game={game} solver={solver} showEnvelopeOdds value={room} onChange={setRoom} />
       <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
       {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, `${card.name} ? ${pct(solver.probabilities[card.id]?.envelope ?? 0)}`])} />}
+      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, `${card.name} - ${envelopeOddsLabel(game, solver, card.id)}`])} />}
     </div>
     {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
     <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
@@ -714,7 +721,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
   return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
 }
 function CardSelect({ label, type, game, value, onChange, solver, showEnvelopeOdds = false }: { label: string; type: CardType; game: GameState; value: string; onChange: (v: string) => void; solver?: SolverResult; showEnvelopeOdds?: boolean }) {
-  return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, showEnvelopeOdds && solver ? `${c.name} ? ${pct(solver.probabilities[c.id]?.envelope ?? 0)}` : c.name])} />
+  return <Select label={label} value={value} onChange={onChange} options={game.cards.filter((c) => c.type === type).map((c) => [c.id, showEnvelopeOdds && solver ? `${c.name} - ${envelopeOddsLabel(game, solver, c.id)}` : c.name])} />
 }
 
 function envelopeLabel(game: GameState, solver: SolverResult, type: CardType) {
@@ -913,7 +920,9 @@ function DisproverProbabilities({ game, solver, suggestion, cards }: { game: Gam
     {cards.map((card) => {
       const mark = game.marks[card.id]?.[disproverId] ?? 'unknown'
       const wasShown = suggestion.result.kind === 'shown' && suggestion.result.shownCardId === card.id
-      const label = wasShown ? 'shown' : mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : pct(solver.probabilities[card.id]?.[disproverId] ?? 0)
+      const disproverProbability = solver.probabilities[card.id]?.[disproverId] ?? 0
+      const probabilityLabel = Math.round(disproverProbability * 100) === 0 ? envelopeOddsLabel(game, solver, card.id) : pct(disproverProbability)
+      const label = wasShown ? 'shown' : mark === 'yes' ? 'YES' : mark === 'no' ? 'no' : probabilityLabel
       return <span className={`prob-chip ${wasShown ? 'shown' : ''}`} key={card.id}>
         <span>{card.name}</span>
         <strong>{label}</strong>
