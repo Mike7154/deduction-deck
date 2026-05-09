@@ -215,6 +215,19 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
   cursor: pointer;
 }
 .card-link:hover { color: #e8be78; text-decoration: underline; transform: none; background: transparent; border-color: transparent; }
+.note-badge { margin-left: 5px; font-size: 11px; vertical-align: middle; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.note-editor { margin-bottom: 12px; }
+.note-editor textarea {
+  width: 100%;
+  min-height: 88px;
+  resize: vertical;
+  border-radius: 14px;
+  border: 1px solid rgba(246, 219, 176, .14);
+  background: rgba(10, 8, 6, .45);
+  color: #f7e8cf;
+  padding: 10px 11px;
+  outline: none;
+}
 .header-link {
   background: transparent;
   border: 0;

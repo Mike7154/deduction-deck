@@ -25,6 +25,7 @@ export type GameState = {
   players: Player[]
   marks: Record<string, Record<LocationId, Mark>>
   suggestions: Suggestion[]
+  notes?: Record<string, string>
   behaviorOptIn: boolean
   activeSuggesterId: string
 }
@@ -85,6 +86,7 @@ export function createDefaultGame(): GameState {
     players: defaultPlayers,
     marks: createBlankMarks(),
     suggestions: [],
+    notes: {},
     behaviorOptIn: true,
     activeSuggesterId: defaultPlayers[0].id,
   }

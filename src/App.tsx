@@ -18,6 +18,7 @@ function userScopedKey(baseKey: string, profileId = defaultProfileId) {
 function hydrateGame(game: GameState): GameState {
   return {
     ...game,
+    notes: game.notes ?? {},
     behaviorOptIn: game.behaviorOptIn ?? true,
     activeSuggesterId: game.activeSuggesterId ?? [...game.players].sort((a, b) => a.turnOrder - b.turnOrder)[0]?.id ?? game.players[0]?.id ?? 'me',
   }
@@ -175,6 +176,7 @@ function normalizeSetupGame(draft: GameState): GameState {
     players,
     marks,
     suggestions: [],
+    notes: {},
     behaviorOptIn: draft.behaviorOptIn,
     activeSuggesterId: players[0]?.id ?? 'player-1',
   }
@@ -223,6 +225,7 @@ function resetKnownEvidence(game: GameState): GameState {
     players,
     marks: createBlankMarks(game.cards, players),
     suggestions: [],
+    notes: {},
     activeSuggesterId: players[0]?.id ?? game.activeSuggesterId,
   }
 }
@@ -358,6 +361,15 @@ function App() {
     updateGame(next)
   }
 
+  function setCardNote(cardId: string, note: string) {
+    const next = structuredClone(game)
+    next.notes ??= {}
+    const trimmed = note.trim()
+    if (trimmed) next.notes[cardId] = note
+    else delete next.notes[cardId]
+    updateGame(next)
+  }
+
 
   function toggleTheme() {
     setTheme((current) => {
@@ -409,7 +421,7 @@ function App() {
         </aside>
       </main>
       {quickMark && quickMarkCard && <QuickMarkSheet card={quickMarkCard} locationName={quickMarkLocation ?? quickMark.locationId} onSet={(mark) => setMark(quickMark.cardId, quickMark.locationId, mark)} onClose={() => setQuickMark(null)} />}
-      {detailCard && <CardDetailModal card={detailCard} game={game} solver={solver} onClose={() => setDetailCardId(null)} />}
+      {detailCard && <CardDetailModal card={detailCard} game={game} solver={solver} onSaveNote={setCardNote} onClose={() => setDetailCardId(null)} />}
       {detailPlayer && <PlayerDetailModal player={detailPlayer} game={game} solver={solver} onClose={() => setDetailPlayerId(null)} />}
     </div>
   )
@@ -751,7 +763,7 @@ function GroupedRows({ type, game, solver, locations, selected, collapsed, onTog
     {!collapsed && game.cards.filter((c) => c.type === type).map((card) => {
       const envelopeOut = game.marks[card.id].envelope === 'no' || (solver.probabilities[card.id]?.envelope ?? 0) === 0
       return <tr className={envelopeOut ? 'not-envelope-row' : ''} key={card.id}>
-        <td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>
+        <td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}{game.notes?.[card.id]?.trim() && <span className="note-badge" title={game.notes[card.id]}>📝</span>}</button></td>
         {locations.map((loc) => {
           const mark = game.marks[card.id][loc]
           const prob = solver.probabilities[card.id]?.[loc] ?? 0
@@ -772,7 +784,7 @@ function GuessMatrix({ game, solver, locations, collapsedTypes, onToggleType, on
   return <div className="matrix-wrap"><table className="matrix guess-matrix"><thead><tr><th>Card</th>{locations.map((loc) => <th key={loc} className={playerById(game.players, loc)?.isMe ? 'me-col' : ''}><button className="header-link" onClick={() => onOpenPlayer(loc)}>{playerById(game.players, loc)?.name}</button></th>)}</tr></thead><tbody>
     {(['suspect', 'weapon', 'room'] as CardType[]).map((type) => <>
       <TypeHeader key={`${type}-group`} type={type} game={game} solver={solver} collapsed={collapsedTypes[type]} onToggle={() => onToggleType(type)} colSpan={locations.length + 1} />
-      {!collapsedTypes[type] && game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}</button></td>{locations.map((loc) => {
+      {!collapsedTypes[type] && game.cards.filter((c) => c.type === type).map((card) => <tr key={card.id}><td className="card-name"><button className="card-link" onClick={() => onOpenCard(card.id)}>{card.name}{game.notes?.[card.id]?.trim() && <span className="note-badge" title={game.notes[card.id]}>📝</span>}</button></td>{locations.map((loc) => {
         const count = guessCount(game, loc, card.id)
         const mark = game.marks[card.id][loc]
         const probability = solver.probabilities[card.id]?.[loc] ?? 0
@@ -892,7 +904,8 @@ function PlayerSuggestionRow({ game, solver, suggestion, focusPlayerId }: { game
 }
 
 
-function CardDetailModal({ card, game, solver, onClose }: { card: Card; game: GameState; solver: SolverResult; onClose: () => void }) {
+function CardDetailModal({ card, game, solver, onSaveNote, onClose }: { card: Card; game: GameState; solver: SolverResult; onSaveNote: (cardId: string, note: string) => void; onClose: () => void }) {
+  const [note, setNote] = useState(game.notes?.[card.id] ?? '')
   const involved = game.suggestions.filter((s) => !s.disabled && s.cardIds.includes(card.id))
   const repeatedByPlayer = orderedPlayers(game.players)
     .map((player) => ({ player, count: involved.filter((s) => s.suggesterId === player.id).length }))
@@ -928,6 +941,12 @@ function CardDetailModal({ card, game, solver, onClose }: { card: Card; game: Ga
           <div className="repeat-list">{repeatedByPlayer.length ? repeatedByPlayer.map(({ player, count }) => <div key={player.id}><strong>{count}</strong><span>{player.name}</span></div>) : <p className="muted">No one has guessed this card yet.</p>}</div>
         </section>
       </div>
+
+      <section className="detail-block note-editor">
+        <h2>My note</h2>
+        <textarea value={note} placeholder="Example: Green keeps guessing this with different rooms; maybe Green does not hold it." onChange={(event) => setNote(event.target.value)} />
+        <div className="button-row"><button className="primary" onClick={() => onSaveNote(card.id, note)}>Save note</button><button onClick={() => { setNote(''); onSaveNote(card.id, '') }}>Clear</button></div>
+      </section>
 
       <section className="detail-block action-history">
         <h2>Action history</h2>
