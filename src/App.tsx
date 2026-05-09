@@ -714,7 +714,7 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
 
     {quickOpen && <div className="modal-backdrop quick-suggestion-backdrop" role="dialog" aria-modal="true" onClick={() => setQuickOpen(false)}>
       <section className="quick-suggestion-modal panel" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-head"><div><h1>Log suggestion</h1><p>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''} is asking.</p></div><button onClick={() => setQuickOpen(false)}>Close</button></div>
+        <div className="modal-head"><div><h1>Log suggestion</h1><div className="quick-asker-banner"><span>Asker</span><strong>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''}</strong></div></div><button onClick={() => setQuickOpen(false)}>Close</button></div>
         <div className="form-grid quick-card-grid">
           <CardSelect label="Suspect" type="suspect" game={game} solver={solver} showEnvelopeOdds value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
           <CardSelect label="Weapon" type="weapon" game={game} solver={solver} showEnvelopeOdds value={weapon} onChange={setWeapon} />
@@ -926,6 +926,12 @@ function CardDetailModal({ card, game, solver, onSaveNote, onClose }: { card: Ca
         <button onClick={onClose}>Close</button>
       </div>
 
+      <section className="detail-block note-editor emphasis-note">
+        <h2>My note</h2>
+        <input value={note} maxLength={120} placeholder="Short note, e.g. Green keeps probing this" onChange={(event) => setNote(event.target.value)} />
+        <div className="button-row"><button className="primary" onClick={() => onSaveNote(card.id, note)}>Save note</button><button onClick={() => { setNote(''); onSaveNote(card.id, '') }}>Clear</button></div>
+      </section>
+
       <div className="card-detail-grid">
         <section className="detail-block emphasis-block">
           <span>Envelope odds</span>
@@ -941,12 +947,6 @@ function CardDetailModal({ card, game, solver, onSaveNote, onClose }: { card: Ca
           <div className="repeat-list">{repeatedByPlayer.length ? repeatedByPlayer.map(({ player, count }) => <div key={player.id}><strong>{count}</strong><span>{player.name}</span></div>) : <p className="muted">No one has guessed this card yet.</p>}</div>
         </section>
       </div>
-
-      <section className="detail-block note-editor">
-        <h2>My note</h2>
-        <textarea value={note} placeholder="Example: Green keeps guessing this with different rooms; maybe Green does not hold it." onChange={(event) => setNote(event.target.value)} />
-        <div className="button-row"><button className="primary" onClick={() => onSaveNote(card.id, note)}>Save note</button><button onClick={() => { setNote(''); onSaveNote(card.id, '') }}>Clear</button></div>
-      </section>
 
       <section className="detail-block action-history">
         <h2>Action history</h2>

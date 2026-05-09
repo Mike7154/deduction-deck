@@ -216,18 +216,11 @@ tfoot td:first-child { text-align: left; left: 0; z-index: 2; }
 }
 .card-link:hover { color: #e8be78; text-decoration: underline; transform: none; background: transparent; border-color: transparent; }
 .note-badge { margin-left: 5px; font-size: 11px; vertical-align: middle; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
-.note-editor { margin-bottom: 12px; }
-.note-editor textarea {
-  width: 100%;
-  min-height: 88px;
-  resize: vertical;
-  border-radius: 14px;
-  border: 1px solid rgba(246, 219, 176, .14);
-  background: rgba(10, 8, 6, .45);
-  color: #f7e8cf;
-  padding: 10px 11px;
-  outline: none;
-}
+.note-editor { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px; }
+.note-editor h2 { margin: 0; white-space: nowrap; font-size: 12px; }
+.note-editor .button-row { margin: 0; flex-wrap: nowrap; }
+.note-editor .button-row button { padding: 7px 9px; font-size: 12px; }
+.emphasis-note { border-color: rgba(232, 190, 120, .22); background: rgba(232, 190, 120, .07); }
 .header-link {
   background: transparent;
   border: 0;
@@ -599,6 +592,9 @@ th.me-col { color: #b9f0cf; }
 /* Quick suggestion pop-out */
 .popout-button { margin-left: auto; }
 .quick-suggestion-modal { width: min(620px, 100%); max-height: min(760px, calc(100vh - 32px)); overflow: auto; padding: 18px; }
+.quick-asker-banner { display: inline-grid; gap: 3px; min-width: 220px; margin-top: 8px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, #ffcf7a, #b9f0cf); color: #1b100a; box-shadow: 0 12px 28px rgba(232,190,120,.22); }
+.quick-asker-banner span { font-size: 11px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+.quick-asker-banner strong { font-size: 26px; line-height: 1; letter-spacing: -.03em; }
 .quick-card-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .responder-step { display: grid; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(125, 190, 152, .11); border: 1px solid rgba(125, 190, 152, .2); }
 .responder-step > span { color: #bda98b; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
@@ -613,6 +609,7 @@ th.me-col { color: #b9f0cf; }
 .app-shell[data-theme="light"] .modal-head h1,
 .app-shell[data-theme="light"] .card-modal h1,
 .app-shell[data-theme="light"] .quick-suggestion-modal h1 { color: #2f251a; }
+.app-shell[data-theme="light"] .quick-asker-banner { color: #21170d; background: linear-gradient(135deg, #f1bf69, #9ed2b7); }
 .app-shell[data-theme="light"] .emphasis-block { background: linear-gradient(135deg, rgba(232,190,120,.28), rgba(125,190,152,.22)); border-color: rgba(93,65,35,.14); }
 .app-shell[data-theme="light"] .emphasis-block > strong,
 .app-shell[data-theme="light"] .prob-chip strong,
