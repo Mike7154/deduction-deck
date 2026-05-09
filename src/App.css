@@ -183,6 +183,7 @@ td { padding: 7px 5px; border-bottom: 1px solid rgba(246, 219, 176, .08); color:
 .current-turn-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 16px; background: linear-gradient(135deg, rgba(232, 190, 120, .16), rgba(125, 190, 152, .11)); border: 1px solid rgba(232, 190, 120, .18); margin-bottom: 12px; }
 .current-turn-box span { color: #bda98b; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
 .current-turn-box strong { font-size: 18px; }
+.mobile-expand-button { display: none; }
 .microcopy { font-size: 12px; margin: -2px 0 12px; color: #a99475; }
 .not-envelope-row .card-name { color: #b7a07f; font-weight: 650; }
 .prob-cell.envelope-out { color: #8f7a60; background: rgba(255,255,255,.018); }
@@ -511,6 +512,10 @@ th:first-child { width: 124px; }
   p, .muted { font-size: 12px; }
   .current-turn-box { padding: 8px; }
   .form-grid { gap: 8px; }
+  .suggestion-title { display: none; }
+  .suggestion-card { padding: 8px; }
+  .current-turn-box { margin-bottom: 0; }
+  .mobile-expand-button { display: inline-flex; }
   .summary-list { gap: 6px; }
   .summary-list div { padding: 6px 8px; }
 }

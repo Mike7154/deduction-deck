@@ -644,6 +644,7 @@ function QuickMarkSheet({ card, locationName, onSet, onClose }: { card: Card; lo
 }
 
 function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solver: SolverResult; onAdd: (s: Suggestion) => void; onSkip: () => void }) {
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches)
   const firstByType = (type: CardType) => game.cards.find((c) => c.type === type)!.id
   const [suspect, setSuspect] = useState(firstByType('suspect'))
   const [weapon, setWeapon] = useState(firstByType('weapon'))
@@ -699,18 +700,20 @@ function SuggestionForm({ game, solver, onAdd, onSkip }: { game: GameState; solv
 
   return <section className="suggestion-card">
     <div className="suggestion-title"><h2>Current suggestion</h2><button className="tiny" onClick={onSkip}>Skip suggester</button></div>
-    <div className="current-turn-box"><span>Now asking</span><strong>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''}</strong><button className="tiny popout-button" onClick={openQuickPlay}>Pop out</button></div>
-    <div className="form-grid">
-      <CardSelect label="Suspect" type="suspect" game={game} solver={solver} showEnvelopeOdds value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
-      <CardSelect label="Weapon" type="weapon" game={game} solver={solver} showEnvelopeOdds value={weapon} onChange={setWeapon} />
-      <CardSelect label="Room" type="room" game={game} solver={solver} showEnvelopeOdds value={room} onChange={setRoom} />
-      <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
-      {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
-      {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, `${card.name} - ${envelopeOddsLabel(game, solver, card.id)}`])} />}
-    </div>
-    {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
-    <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
-    <button className="primary wide" onClick={() => submit()}>Record evidence and advance turn</button>
+    <div className="current-turn-box"><span>Now asking</span><strong>{suggester.name}{suggester.id === me?.id ? ' (Me)' : ''}</strong><button className="tiny popout-button" onClick={openQuickPlay}>Pop out</button><button className="tiny mobile-expand-button" onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Expand' : 'Collapse'}</button></div>
+    {!collapsed && <>
+      <div className="form-grid">
+        <CardSelect label="Suspect" type="suspect" game={game} solver={solver} showEnvelopeOdds value={suspect} onChange={(v) => { setSuspect(v); setShownCard(v) }} />
+        <CardSelect label="Weapon" type="weapon" game={game} solver={solver} showEnvelopeOdds value={weapon} onChange={setWeapon} />
+        <CardSelect label="Room" type="room" game={game} solver={solver} showEnvelopeOdds value={room} onChange={setRoom} />
+        <Select label="Result" value={canDisprove ? displayedResultKind : 'nobody'} onChange={(v) => setResultKind(v as typeof resultKind)} options={resultOptions} />
+        {canDisprove && displayedResultKind !== 'nobody' && displayedResultKind !== 'unresolved' && <Select label="Disprover" value={disproverId} onChange={setDisprover} options={responderOptions} />}
+        {canDisprove && displayedResultKind === 'shown' && <Select label="Shown card" value={safeShownCardId} onChange={setShownCard} options={shownCardOptions.map((card) => [card.id, `${card.name} - ${envelopeOddsLabel(game, solver, card.id)}`])} />}
+      </div>
+      {exactCardKnown && displayedResultKind === 'shown' && <p className="hint exact-hint">Because {suggester.isMe ? 'you are asking' : 'you are disproving'}, the result defaults to the exact card shown.</p>}
+      <p className="microcopy">The solver automatically marks everyone between the suggester and disprover as unable to disprove.</p>
+      <button className="primary wide" onClick={() => submit()}>Record evidence and advance turn</button>
+    </>}
 
     {quickOpen && <div className="modal-backdrop quick-suggestion-backdrop" role="dialog" aria-modal="true" onClick={() => setQuickOpen(false)}>
       <section className="quick-suggestion-modal panel" onClick={(event) => event.stopPropagation()}>
