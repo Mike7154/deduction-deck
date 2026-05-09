@@ -114,6 +114,13 @@ function possibleShownCards(game: GameState, solver: SolverResult, ids: [string,
   return possible.length ? possible : cards.filter((card) => game.marks[card.id]?.[playerId] !== 'no')
 }
 
+function strictlyPossibleShownCards(game: GameState, solver: SolverResult, ids: [string, string, string], playerId: string) {
+  return suggestedCards(game, ids).filter((card) => {
+    const mark = game.marks[card.id]?.[playerId]
+    return mark === 'yes' || (mark !== 'no' && (solver.probabilities[card.id]?.[playerId] ?? 0) > 0)
+  })
+}
+
 function respondersAfter(game: GameState, suggesterId: string) {
   const players = orderedPlayers(game.players)
   const start = players.findIndex((p) => p.id === suggesterId)
@@ -681,6 +688,7 @@ function SuggestionForm({ game, solver, turnCards, onSelectTurnCard, onAdd, onSk
   const selectedCardIds = completeTurnCardIds(game, turnCards)
   const selectedCards = selectedCardIds ? suggestedCards(game, selectedCardIds) : []
   const shownCardOptions = selectedCardIds && canDisprove ? possibleShownCards(game, solver, selectedCardIds, disproverId) : selectedCards
+  const exactShownCardOptions = selectedCardIds && currentResponder ? strictlyPossibleShownCards(game, solver, selectedCardIds, currentResponder.id) : []
   const safeShownCardId = shownCardOptions.some((card) => card.id === shownCardId) ? shownCardId : shownCardOptions[0]?.id ?? selectedCardIds?.[0] ?? ''
   const canRecord = Boolean(selectedCardIds)
   const displayedResultKind = exactCardKnown && resultKind === 'unknown' ? 'shown' : resultKind
@@ -747,10 +755,10 @@ function SuggestionForm({ game, solver, turnCards, onSelectTurnCard, onAdd, onSk
         {currentResponder ? <div className="responder-step">
           <span>Next player</span>
           <strong>{currentResponder.name}{currentResponder.id === me?.id ? ' (Me)' : ''}</strong>
-          {(suggester.isMe || currentResponder.isMe) ? <div className="shown-card-buttons">
+          {(suggester.isMe || currentResponder.isMe) && exactShownCardOptions.length > 0 ? <div className="shown-card-buttons">
             <p className="microcopy">If they can disprove, choose the exact card shown.</p>
-            {selectedCardIds ? possibleShownCards(game, solver, selectedCardIds, currentResponder.id).map((card) => <button className="primary" key={card.id} onClick={() => markCanDisprove(card.id)}>Showed {card.name}</button>) : null}
-          </div> : <button className="primary wide" onClick={() => markCanDisprove()} disabled={!canRecord}>Can disprove</button>}
+            {exactShownCardOptions.map((card) => <button className="primary" key={card.id} onClick={() => markCanDisprove(card.id)}>Showed {card.name}</button>)}
+          </div> : !(suggester.isMe || currentResponder.isMe) && <button className="primary wide" onClick={() => markCanDisprove()} disabled={!canRecord}>Can disprove</button>}
           <button className="wide" onClick={markCannotDisprove} disabled={!canRecord}>Cannot disprove</button>
         </div> : <button className="primary wide" onClick={() => submit({ kind: 'nobody' })} disabled={!canRecord}>Nobody disproved</button>}
         <button className="wide" onClick={() => { onSkip(); setQuickOpen(false) }}>Skip / advance asker</button>
