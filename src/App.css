@@ -126,6 +126,15 @@ td { padding: 7px 5px; border-bottom: 1px solid rgba(246, 219, 176, .08); color:
 .log-item { padding: 10px; border-radius: 14px; background: rgba(0,0,0,.18); color: #e7d4b6; font-size: 13px; }
 .log-item small { display: block; color: #a99475; margin-top: 5px; }
 .danger-hint { background: rgba(222, 91, 78, .14); border: 1px solid rgba(222, 91, 78, .28); color: #ffcbc5; }
+.behavior-impact-button {
+  margin: 6px 0 10px;
+  font-weight: 950;
+  color: #1b100a;
+  background: linear-gradient(135deg, #ffcf7a, #b9f0cf);
+  border: 0;
+  box-shadow: 0 10px 26px rgba(232, 190, 120, .22);
+}
+.behavior-impact-button::before { content: '⚑ '; }
 .evidence-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .suspect-pill, .disabled-pill {
   display: inline-flex;

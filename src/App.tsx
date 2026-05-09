@@ -983,7 +983,7 @@ function CurrentDeduction({ game, solver }: { game: GameState; solver: SolverRes
     <div className="accusation"><span>{accusation[0]}</span><span>{accusation[1]}</span><span>{accusation[2]}</span></div>
     <div className="deduction-prob"><span>Combo probability</span><strong>{pct(solver.accusationProbability)}</strong></div>
     <div className={`status ${solver.status}`}>{solver.status === 'exact' ? 'Exact solver' : solver.status === 'capped' ? 'Capped enumeration' : 'Contradiction'}</div>
-    {solver.behaviorWeights.length > 0 && <button className="wide" onClick={() => setBehaviorOpen(true)}>View {solver.behaviorWeights.length} behavior impact{solver.behaviorWeights.length === 1 ? '' : 's'}</button>}
+    {solver.behaviorWeights.length > 0 && <button className="wide behavior-impact-button" onClick={() => setBehaviorOpen(true)}>View {solver.behaviorWeights.length} behavior impact{solver.behaviorWeights.length === 1 ? '' : 's'}</button>}
     {solver.status === 'contradiction' && game.behaviorOptIn && <p className="message">Behavior heuristics are on. If the entries are correct, try turning them off in Game setup; the contradiction may mean someone guessed all three cards from their own hand.</p>}
     {solver.messages.map((m) => <p className="message" key={m}>{m}</p>)}
     {behaviorOpen && <BehaviorWeightsModal game={game} solver={solver} onClose={() => setBehaviorOpen(false)} />}
@@ -996,17 +996,17 @@ function BehaviorWeightsModal({ game, solver, onClose }: { game: GameState; solv
       <div className="modal-head">
         <div>
           <h1 id="behavior-impact-title">Behavior impacts</h1>
-          <p>These soft weights are currently changing the displayed probabilities. They are not hard Clue rules.</p>
+          <p>These are active soft assumptions from player behavior. They nudge probabilities, but they are not hard Clue rules.</p>
         </div>
         <button onClick={onClose}>Close</button>
       </div>
       <section className="detail-block action-history">
         {solver.behaviorWeights.map((weight, index) => {
-          const player = playerById(game.players, weight.playerId)?.name ?? 'Unknown player'
+          const disprover = playerById(game.players, weight.playerId)?.name ?? 'Unknown player'
           return <article className="action-row" key={`${weight.playerId}-${weight.cardIds.join('-')}-${index}`}>
-            <div className="action-main"><strong>{player}</strong><span>{comboLabel(game, [...weight.cardIds, ...weight.repeatedCardIds])}</span></div>
-            <p>Because the asker later repeated <strong>{comboLabel(game, weight.repeatedCardIds)}</strong>, worlds where that repeated card was the likely shown card are down-weighted. This favors <strong>{comboLabel(game, weight.cardIds)}</strong> as what {player} may have shown.</p>
-            <small>Weight applied: {Math.round(weight.penalty * 100)}% for the repeated-card explanation.</small>
+            <div className="action-main"><strong>{disprover} disproved an earlier suggestion</strong><span>{comboLabel(game, [...weight.cardIds, ...weight.repeatedCardIds])}</span></div>
+            <p>The asker later guessed <strong>{comboLabel(game, weight.repeatedCardIds)}</strong> again. The behavior model treats it as less likely that {disprover} had shown that repeated card earlier, so it shifts weight toward <strong>{comboLabel(game, weight.cardIds)}</strong> as the card {disprover} may have shown.</p>
+            <small>Repeated-card explanation weight: {Math.round(weight.penalty * 100)}%. Lower means the repeat is treated as stronger evidence against that card having been shown.</small>
           </article>
         })}
       </section>
