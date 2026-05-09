@@ -386,7 +386,7 @@ function App() {
   const quickMarkCard = quickMark ? cardById(game.cards, quickMark.cardId) : null
   const quickMarkLocation = quickMark?.locationId === 'envelope' ? 'Envelope' : playerById(game.players, quickMark?.locationId ?? '')?.name
 
-  if (setupMode) return <SetupScreen draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { replaceGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setQuickMark(null); setDetailCardId(null); setMatrixMode('probabilities') }} />
+  if (setupMode) return <SetupScreen theme={theme} draft={setupDraft} onChange={setSetupDraft} onCancel={() => setSetupMode(false)} onStart={(draft) => { replaceGame(normalizeSetupGame(draft)); setSetupMode(false); setSelected(null); setQuickMark(null); setDetailCardId(null); setMatrixMode('probabilities') }} />
   if (!solver) return null
 
   return (
@@ -454,7 +454,7 @@ function TopBar({ game, theme, onToggleTheme, canUndo, onUndo, onResetLocal, onN
   </header>
 }
 
-function SetupScreen({ draft, onChange, onCancel, onStart }: { draft: GameState; onChange: (g: GameState) => void; onCancel: () => void; onStart: (g: GameState) => void }) {
+function SetupScreen({ theme, draft, onChange, onCancel, onStart }: { theme: ThemeMode; draft: GameState; onChange: (g: GameState) => void; onCancel: () => void; onStart: (g: GameState) => void }) {
   const errors = setupErrors(draft)
   const dealtCards = Math.max(0, draft.cards.length - 3)
 
@@ -542,7 +542,7 @@ function SetupScreen({ draft, onChange, onCancel, onStart }: { draft: GameState;
     setDraft({ ...draft, players: distributeCardCounts(structuredClone(defaultPlayers), draft.cards.length) })
   }
 
-  return <div className="app-shell setup-shell">
+  return <div className="app-shell setup-shell" data-theme={theme}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark">DD</span><div><strong>New game setup</strong><small>No solver runs until you start</small></div></div>
       <nav><button onClick={onCancel}>Cancel</button></nav>

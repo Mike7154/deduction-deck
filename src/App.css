@@ -573,6 +573,15 @@ th:first-child { width: 124px; }
 .app-shell[data-theme="light"] .repeat-list div,
 .app-shell[data-theme="light"] .action-row,
 .app-shell[data-theme="light"] .prob-chip { background: rgba(93,65,35,.06); color: #3a2b1d; }
+.app-shell[data-theme="light"] .setup-section,
+.app-shell[data-theme="light"] .card-type-editor,
+.app-shell[data-theme="light"] .setup-player-row { background: rgba(255,255,255,.58); border-color: rgba(93, 65, 35, .12); }
+.app-shell[data-theme="light"] .setup-total { background: rgba(125, 190, 152, .18); border-color: rgba(33, 105, 63, .16); }
+.app-shell[data-theme="light"] .setup-total span { color: #745f47; }
+.app-shell[data-theme="light"] .setup-total strong { color: #21693f; }
+.app-shell[data-theme="light"] .setup-footer { background: rgba(255, 250, 241, .94); border-color: rgba(93, 65, 35, .16); }
+.app-shell[data-theme="light"] .setup-errors { color: #8d2118; }
+.app-shell[data-theme="light"] .setup-errors span { background: rgba(176, 55, 43, .1); }
 .app-shell[data-theme="light"] .guess-cell { color: #745f47; background: rgba(93,65,35,.04); }
 .app-shell[data-theme="light"] .guess-cell strong,
 .app-shell[data-theme="light"] .deduction-prob strong { color: #21693f; }
